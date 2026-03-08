@@ -1,0 +1,71 @@
+package com.smoodee.project.service;
+
+import com.smoodee.global.exception.ErrorCode;
+import com.smoodee.global.exception.ForbiddenException;
+import com.smoodee.global.exception.NotFoundException;
+import com.smoodee.project.domain.Project;
+import com.smoodee.project.domain.ProjectStatus;
+import com.smoodee.project.domain.ProjectType;
+import com.smoodee.project.repository.ProjectRepository;
+import java.util.Arrays;
+import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class ProjectService {
+
+  private final ProjectRepository projectRepository;
+
+  @Transactional(readOnly = true)
+  public List<Project> listInProgress(Long userId, ProjectType type) {
+    List<ProjectStatus> statuses =
+        Arrays.asList(
+            ProjectStatus.INIT,
+            ProjectStatus.UPLOADING,
+            ProjectStatus.CREATED,
+            ProjectStatus.SLOT_CONFIG,
+            ProjectStatus.IN_PROGRESS);
+    return projectRepository.findByUserIdAndTypeAndStatuses(userId, type, statuses);
+  }
+
+  @Transactional(readOnly = true)
+  public List<Project> listRecent(Long userId, ProjectType type) {
+    List<ProjectStatus> statuses = Arrays.asList(ProjectStatus.DONE, ProjectStatus.EXPIRED);
+    return projectRepository.findByUserIdAndTypeAndStatuses(userId, type, statuses);
+  }
+
+  @Transactional(readOnly = true)
+  public Project getProject(Long projectId) {
+    return projectRepository
+        .findById(projectId)
+        .orElseThrow(() -> new NotFoundException(ErrorCode.PROJECT_NOT_FOUND));
+  }
+
+  @Transactional(readOnly = true)
+  public Project getProjectWithOwnerCheck(Long projectId, Long userId) {
+    Project project = getProject(projectId);
+    requireOwner(project, userId);
+    return project;
+  }
+
+  @Transactional
+  public void deleteProject(Long projectId, Long userId) {
+    Project project = getProject(projectId);
+    requireOwner(project, userId);
+    projectRepository.delete(project);
+  }
+
+  @Transactional
+  public Project save(Project project) {
+    return projectRepository.save(project);
+  }
+
+  public void requireOwner(Project project, Long userId) {
+    if (!project.getUserId().equals(userId)) {
+      throw new ForbiddenException(ErrorCode.PROJECT_ACCESS_DENIED);
+    }
+  }
+}
