@@ -1,0 +1,23 @@
+import apiClient from "./apiClient";
+import { ChatMessageResponse, SendMessageRequest, CursorPageResponse, ApiResponse } from "./types";
+
+export const chatService = {
+  async listMessages(
+    groupId: number,
+    cursor?: string
+  ): Promise<CursorPageResponse<ChatMessageResponse>> {
+    const { data } = await apiClient.get<ApiResponse<CursorPageResponse<ChatMessageResponse>>>(
+      `/api/v1/groups/${groupId}/messages`,
+      { params: cursor ? { cursor } : undefined }
+    );
+    return data.data;
+  },
+
+  async sendMessage(groupId: number, body: SendMessageRequest): Promise<ChatMessageResponse> {
+    const { data } = await apiClient.post<ApiResponse<ChatMessageResponse>>(
+      `/api/v1/groups/${groupId}/messages`,
+      body
+    );
+    return data.data;
+  },
+};

@@ -2,6 +2,7 @@ package com.smoodee.personal.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smoodee.asset.service.AssetService;
 import com.smoodee.global.exception.BusinessException;
 import com.smoodee.global.exception.ErrorCode;
 import com.smoodee.global.exception.NotFoundException;
@@ -20,7 +21,9 @@ import com.smoodee.template.domain.TemplateType;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,6 +37,7 @@ public class ColorworkService {
   private final ProjectService projectService;
   private final PersonalColorworkConfigRepository configRepository;
   private final PersonalFrameRepository frameRepository;
+  private final AssetService assetService;
   private final ObjectMapper objectMapper;
 
   @Transactional
@@ -68,13 +72,17 @@ public class ColorworkService {
     Project project = projectService.getProject(projectId);
     projectService.requireOwner(project, userId);
 
-    String seed = String.valueOf(System.currentTimeMillis());
-    List<String> colors = generatePalette(seed);
+    long base = System.currentTimeMillis();
+    List<PaletteShuffleResponse.PaletteEntry> palettes = new ArrayList<>();
+    for (int i = 0; i < 3; i++) {
+      String seed = base + "-" + i;
+      palettes.add(new PaletteShuffleResponse.PaletteEntry(seed, generatePalette(seed)));
+    }
 
     PersonalColorworkConfig config = getConfig(projectId);
-    config.updatePalette(seed, null);
+    config.updatePalette(palettes.get(0).getSeed(), null);
 
-    return new PaletteShuffleResponse(seed, colors);
+    return new PaletteShuffleResponse(palettes);
   }
 
   @Transactional
@@ -99,6 +107,7 @@ public class ColorworkService {
     PersonalColorworkConfig config = getConfig(projectId);
     config.selectGrid(gridType);
     project.transitionTo(ProjectStatus.UPLOADING);
+    frameRepository.deleteByProjectId(projectId);
   }
 
   @Transactional
@@ -111,7 +120,11 @@ public class ColorworkService {
       throw new BusinessException(ErrorCode.GRID_TYPE_NOT_SELECTED);
     }
 
-    int maxIndex = (config.getGridType() == GridType.G2) ? 3 : 8;
+    int maxIndex = switch (config.getGridType()) {
+      case G2 -> 3;
+      case G6 -> 5;
+      case G3 -> 8;
+    };
     if (frameIndex < 0 || frameIndex > maxIndex) {
       throw new BusinessException(ErrorCode.INVALID_FRAME_INDEX);
     }
@@ -136,7 +149,54 @@ public class ColorworkService {
 
     PersonalColorworkConfig config = getConfig(projectId);
     List<PersonalFrame> frames = frameRepository.findByProjectIdOrderByFrameIndex(projectId);
-    return ColorworkStateResponse.of(config, frames);
+
+    Map<Long, String> assetUrlMap = frames.stream()
+        .filter(f -> f.getAssetId() != null)
+        .collect(Collectors.toMap(
+            PersonalFrame::getAssetId,
+            f -> assetService.generateDownloadUrl(f.getAssetId(), userId)));
+
+    return ColorworkStateResponse.of(config, frames, assetUrlMap);
+  }
+
+  @Transactional(readOnly = true)
+  public int[] getFrameProgress(Long projectId) {
+    return configRepository.findByProjectId(projectId).map(config -> {
+      int total = config.getGridType() == null ? 0 : switch (config.getGridType()) {
+        case G2 -> 4;
+        case G6 -> 6;
+        case G3 -> 9;
+      };
+      int filled = (int) frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
+          .filter(f -> f.getAssetId() != null)
+          .count();
+      return new int[]{filled, total};
+    }).orElse(new int[]{0, 0});
+  }
+
+  @Transactional(readOnly = true)
+  public String getPaletteColor(Long projectId) {
+    return configRepository.findByProjectId(projectId).map(config -> {
+      String json = config.getSelectedPaletteJson();
+      if (json == null) return null;
+      try {
+        List<String> colors = objectMapper.readValue(json,
+            objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
+        if (colors == null || colors.isEmpty()) return null;
+        return colors.get(colors.size() / 2);
+      } catch (Exception e) {
+        return null;
+      }
+    }).orElse(null);
+  }
+
+  @Transactional(readOnly = true)
+  public String getThumbnailUrl(Long projectId, Long userId) {
+    return frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
+        .filter(f -> f.getAssetId() != null)
+        .findFirst()
+        .map(f -> assetService.generateDownloadUrl(f.getAssetId(), userId))
+        .orElse(null);
   }
 
   private PersonalColorworkConfig getConfig(Long projectId) {

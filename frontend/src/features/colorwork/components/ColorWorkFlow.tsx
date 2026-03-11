@@ -1,83 +1,288 @@
-import React, { useState, useEffect } from "react";
-import { ChevronLeft, Palette, Camera, Share2, MoreVertical, RefreshCcw } from "lucide-react";
+"use client";
+
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ChevronLeft,
+  Palette,
+  Camera,
+  Share2,
+  RefreshCcw,
+  Download,
+} from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
 import ColorBlockSelector from "./ColorBlockSelector";
-import { randomColorPalette, ColorPalette } from "@/lib/utils/colors";
+import { colorworkService } from "@/lib/api/colorworkService";
+import { assetService } from "@/lib/api/assetService";
+import { renderService } from "@/lib/api/renderService";
+import { projectService } from "@/lib/api/projectService";
+import {
+  ColorPalette as ApiColorPalette,
+  RenderJobResponse,
+} from "@/lib/api/types";
 
-interface SessionSlot {
-  type: string;
-  id: number;
+// ─── Local types ───────────────────────────────────────────────────────────
+
+interface UploadSlot {
+  assetId?: number;
+  url?: string;
 }
 
-interface InitialSession {
-  id?: string;
-  step?: number;
-  selectedColor?: ColorPalette;
-  gridSize?: number;
-  slots?: (SessionSlot | null)[];
-}
+// ─── Component ─────────────────────────────────────────────────────────────
 
-interface SessionData {
-  id: string;
-  templateId: string;
-  title: string;
-  step: number;
-  selectedColor: ColorPalette;
-  gridSize: number;
-  slots: (SessionSlot | null)[];
-  lastModified: string;
-}
+const ColorWorkFlow = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const projectIdParam = searchParams.get("projectId");
+  const projectIdFromUrl = projectIdParam ? parseInt(projectIdParam, 10) : null;
+  const isReentry = projectIdFromUrl !== null;
 
-interface ColorWorkFlowProps {
-  onBack: () => void;
-  navigateTo: (screen: string, params?: any) => void;
-  initialSession?: InitialSession | null;
-  onSaveSession: (sessionData: SessionData) => void;
-}
+  // ── mode & step ──
+  const [mode, setMode] = useState<"guide" | "actual" | null>(null);
+  const [step, setStep] = useState(0);
 
-const ColorWorkFlow = ({
-  onBack,
-  navigateTo,
-  initialSession,
-  onSaveSession,
-}: ColorWorkFlowProps) => {
-  const [mode, setMode] = useState(initialSession ? "actual" : "guide");
-  const [step, setStep] = useState(initialSession?.step || 0);
+  // ── project ──
+  const [projectId, setProjectId] = useState<number | null>(projectIdFromUrl);
+  const [isCreating, setIsCreating] = useState(false);
 
-  // Guide State
+  // ── palette (API) ──
+  const [apiPalettes, setApiPalettes] = useState<ApiColorPalette[]>([]);
+  const [selectedApiPalette, setSelectedApiPalette] =
+    useState<ApiColorPalette | null>(null);
+  const [isPalettesLoading, setIsPalettesLoading] = useState(false);
+
+  // ── grid ──
+  const [gridType, setGridType] = useState<"G2" | "G6" | "G3" | null>(null);
+
+  // ── slots ──
+  const [slots, setSlots] = useState<(UploadSlot | null)[]>([]);
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+
+  // ── render ──
+  const [renderJob, setRenderJob] = useState<RenderJobResponse | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── guide (demo only) ──
   const [guideFilledSlots, setGuideFilledSlots] = useState(
     Array(9).fill(false)
   );
 
-  // Actual State
-  const [colors, setColors] = useState<ColorPalette[]>([]);
-  const [selectedColor, setSelectedColor] = useState<ColorPalette | null>(
-    initialSession?.selectedColor || null
-  );
-  const [gridSize, setGridSize] = useState<number | null>(initialSession?.gridSize || null);
-  const [slots, setSlots] = useState<(SessionSlot | null)[]>(initialSession?.slots || []);
-  const [isProcessing, setIsProcessing] = useState(false);
+  // ── frame modal ──
+  const [frameModalStep, setFrameModalStep] = useState<
+    "closed" | "confirm" | "select"
+  >("closed");
 
-  useEffect(() => {
-    setColors(randomColorPalette());
+  // ── file upload ──
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingSlotIndex = useRef<number>(-1);
+
+  // ── Initialize ──────────────────────────────────────────────────────────
+
+  const fetchPalettes = useCallback(async (pid: number) => {
+    setIsPalettesLoading(true);
+    try {
+      const res = await colorworkService.shufflePalette(pid);
+      setApiPalettes(res?.palettes ?? []);
+    } finally {
+      setIsPalettesLoading(false);
+    }
   }, []);
 
-  const skipGuide = () => {
-    setMode("actual");
-    setStep(1);
-  };
-  const nextGuide = () => setStep((prev) => prev + 1);
+  useEffect(() => {
+    if (projectIdFromUrl) {
+      // Re-entry: restore state from API
+      colorworkService
+        .getState(projectIdFromUrl)
+        .then((state) => {
+          setProjectId(state.projectId);
+          setMode("actual");
 
-  const handleRefreshColors = () => {
-    setColors(randomColorPalette());
-    setSelectedColor(null);
+          // Restore palette if already selected
+          if (state.selectedPaletteSeed && state.selectedColors) {
+            setSelectedApiPalette({
+              seed: state.selectedPaletteSeed,
+              colors: state.selectedColors,
+            });
+          }
+
+          // Restore grid
+          if (state.gridType) {
+            setGridType(state.gridType as "G2" | "G6" | "G3");
+            const slotCount =
+              state.gridType === "G2" ? 4 : state.gridType === "G6" ? 6 : 9;
+            const restored: (UploadSlot | null)[] = Array(slotCount).fill(null);
+            state.frames.forEach((f) => {
+              if (f && f.index < slotCount) {
+                restored[f.index] = { assetId: f.assetId, url: f.assetUrl };
+              }
+            });
+            setSlots(restored);
+          }
+
+          // Determine step
+          if (state.step === "FRAME" || state.step === "DONE") {
+            setStep(3);
+          } else if (state.step === "GRID") {
+            setStep(3);
+          } else if (state.step === "PALETTE") {
+            fetchPalettes(state.projectId);
+            setStep(1);
+          } else {
+            fetchPalettes(state.projectId);
+            setStep(1);
+          }
+        })
+        .catch(() => {
+          setMode("guide");
+        });
+    } else {
+      setMode("guide");
+      setStep(0);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Guide helpers ────────────────────────────────────────────────────────
+
+  const startProject = useCallback(async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+    try {
+      const project = await colorworkService.createProject();
+      const pid = project.id;
+      setProjectId(pid);
+      await colorworkService.markHowtoSeen(pid);
+      await fetchPalettes(pid);
+      router.replace(`/colorwork?projectId=${pid}`);
+      setMode("actual");
+      setStep(1);
+    } finally {
+      setIsCreating(false);
+    }
+  }, [isCreating, fetchPalettes, router]);
+
+  // ── Palette ──────────────────────────────────────────────────────────────
+
+  const handleRefreshPalettes = async () => {
+    if (!projectId) return;
+    await fetchPalettes(projectId);
+    setSelectedApiPalette(null);
   };
+
+  const handleSelectPalette = async (palette: ApiColorPalette) => {
+    setSelectedApiPalette(palette);
+    if (!projectId) return;
+    await colorworkService.selectPalette(projectId, {
+      seed: palette.seed,
+      colors: palette.colors,
+    });
+  };
+
+  // ── Grid ─────────────────────────────────────────────────────────────────
+
+  const handleGridSelect = async (type: "G2" | "G6" | "G3") => {
+    setGridType(type);
+    const count = type === "G2" ? 4 : type === "G6" ? 6 : 9;
+    setSlots(Array(count).fill(null));
+    if (!projectId) return;
+    await colorworkService.selectGrid(projectId, type);
+  };
+
+  // ── Upload ───────────────────────────────────────────────────────────────
+
+  const handleSlotClick = (index: number) => {
+    pendingSlotIndex.current = index;
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const idx = pendingSlotIndex.current;
+    if (!file || idx < 0) return;
+    e.target.value = "";
+    pendingSlotIndex.current = -1;
+
+    // 즉시 로컬 미리보기 표시
+    const localUrl = URL.createObjectURL(file);
+    setSlots((prev) => {
+      const next = [...prev];
+      next[idx] = { url: localUrl };
+      return next;
+    });
+
+    // 백엔드 업로드 (실패해도 미리보기는 유지)
+    if (projectId) {
+      setUploadingIndex(idx);
+      try {
+        const asset = await assetService.uploadAsset(projectId, file);
+        await colorworkService.bindFrame(projectId, idx, asset.id);
+        setSlots((prev) => {
+          const next = [...prev];
+          next[idx] = { assetId: asset.id, url: asset.url };
+          return next;
+        });
+      } catch {
+        // 업로드 실패해도 로컬 미리보기 유지
+      } finally {
+        setUploadingIndex(null);
+      }
+    }
+  };
+
+  // ── Complete / Render ────────────────────────────────────────────────────
+
+  const handleComplete = async () => {
+    if (!projectId || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const job = await renderService.submitPersonal(projectId);
+      setRenderJob(job);
+      setStep(4);
+      pollRenderJob(job.id);
+    } catch {
+      setIsSubmitting(false);
+    }
+  };
+
+  const pollRenderJob = (jobId: number) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const job = await renderService.getRenderJob(jobId);
+        setRenderJob(job);
+        if (job.status === "SUCCEEDED" || job.status === "FAILED") {
+          clearInterval(pollIntervalRef.current!);
+          pollIntervalRef.current = null;
+          setIsSubmitting(false);
+        }
+      } catch {
+        // 폴링 실패 시 중단하고 버튼 복구
+        clearInterval(pollIntervalRef.current!);
+        pollIntervalRef.current = null;
+        setIsSubmitting(false);
+      }
+    }, 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
+
+  // ── Overlay helpers ──────────────────────────────────────────────────────
 
   const renderOverlay = () => (
     <div className="absolute inset-0 bg-gray-900/40 z-40 pointer-events-none" />
   );
-  const renderTooltip = (text: string, positionClass: string, hideArrow = false) => (
+  const renderTooltip = (
+    text: string,
+    positionClass: string,
+    hideArrow = false
+  ) => (
     <div className={`absolute ${positionClass} z-50 w-max max-w-[280px]`}>
       <div className="bg-white text-black px-4 py-2.5 rounded-xl font-bold text-sm shadow-xl relative text-center break-keep leading-snug whitespace-pre-wrap">
         {text}
@@ -88,6 +293,20 @@ const ColorWorkFlow = ({
     </div>
   );
 
+  // ── Guard ────────────────────────────────────────────────────────────────
+
+  if (mode === null) {
+    return (
+      <div className="flex h-full items-center justify-center text-gray-400 text-sm">
+        불러오는 중...
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // GUIDE FLOW
+  // ════════════════════════════════════════════════════════════════════════
+
   if (mode === "guide") {
     if (step === 0) {
       return (
@@ -95,7 +314,7 @@ const ColorWorkFlow = ({
           <StatusBar theme="dark" />
           <div className="absolute top-12 left-4 z-10">
             <button
-              onClick={onBack}
+              onClick={() => router.back()}
               className="p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-600"
             >
               <ChevronLeft size={24} />
@@ -126,14 +345,15 @@ const ColorWorkFlow = ({
             </p>
           </div>
           <div className="w-full p-6 pb-safe mb-4 flex flex-col gap-4 relative z-50">
-            <Button size="lg" onClick={nextGuide}>
+            <Button size="lg" onClick={() => setStep(1)}>
               사용법 알아보기
             </Button>
             <button
-              onClick={skipGuide}
-              className="text-xs font-bold text-gray-400 underline underline-offset-4 hover:text-gray-600 transition-colors"
+              onClick={startProject}
+              disabled={isCreating}
+              className="text-xs font-bold text-gray-400 underline underline-offset-4 hover:text-gray-600 transition-colors disabled:opacity-50"
             >
-              건너뛰기
+              {isCreating ? "준비 중..." : "건너뛰기"}
             </button>
           </div>
         </div>
@@ -147,10 +367,11 @@ const ColorWorkFlow = ({
           {renderOverlay()}
           <div className="absolute top-12 right-6 z-50">
             <button
-              onClick={skipGuide}
-              className="text-xs font-bold text-white/70 hover:text-white underline underline-offset-4"
+              onClick={startProject}
+              disabled={isCreating}
+              className="text-xs font-bold text-white/70 hover:text-white underline underline-offset-4 disabled:opacity-50"
             >
-              건너뛰기
+              {isCreating ? "준비 중..." : "건너뛰기"}
             </button>
           </div>
           <div className="px-6 pt-12 pb-2 opacity-30 relative z-30">
@@ -197,7 +418,7 @@ const ColorWorkFlow = ({
               이전
             </button>
             <button
-              onClick={nextGuide}
+              onClick={() => setStep(2)}
               className="px-6 py-2.5 rounded-xl bg-white text-black font-bold text-sm shadow-lg hover:bg-gray-100 transition-colors"
             >
               다음
@@ -208,21 +429,17 @@ const ColorWorkFlow = ({
     }
 
     if (step === 2) {
-      const handleGuideSlotClick = (i: number) => {
-        const newSlots = [...guideFilledSlots];
-        newSlots[i] = true;
-        setGuideFilledSlots(newSlots);
-      };
       return (
         <div className="flex flex-col h-full bg-white relative pb-safe overflow-hidden animate-fade-in">
           <StatusBar theme="light" />
           {renderOverlay()}
           <div className="absolute top-12 right-6 z-50">
             <button
-              onClick={skipGuide}
-              className="text-xs font-bold text-white/70 hover:text-white underline underline-offset-4"
+              onClick={startProject}
+              disabled={isCreating}
+              className="text-xs font-bold text-white/70 hover:text-white underline underline-offset-4 disabled:opacity-50"
             >
-              건너뛰기
+              {isCreating ? "준비 중..." : "건너뛰기"}
             </button>
           </div>
           <div className="px-6 pt-12 pb-2 opacity-30 relative z-30">
@@ -242,7 +459,11 @@ const ColorWorkFlow = ({
                 {guideFilledSlots.map((filled, i) => (
                   <div
                     key={i}
-                    onClick={() => handleGuideSlotClick(i)}
+                    onClick={() => {
+                      const next = [...guideFilledSlots];
+                      next[i] = true;
+                      setGuideFilledSlots(next);
+                    }}
                     className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer transition-all active:scale-95 ${
                       filled ? "bg-gray-800" : "bg-gray-100 hover:bg-gray-200"
                     } flex items-center justify-center`}
@@ -269,7 +490,7 @@ const ColorWorkFlow = ({
               이전
             </button>
             <button
-              onClick={nextGuide}
+              onClick={() => setStep(3)}
               className="px-6 py-2.5 rounded-xl bg-white text-black font-bold text-sm shadow-lg hover:bg-gray-100 transition-colors"
             >
               다음
@@ -286,10 +507,11 @@ const ColorWorkFlow = ({
           {renderOverlay()}
           <div className="absolute top-12 right-6 z-50">
             <button
-              onClick={skipGuide}
-              className="text-xs font-bold text-white/70 hover:text-white underline underline-offset-4"
+              onClick={startProject}
+              disabled={isCreating}
+              className="text-xs font-bold text-white/70 hover:text-white underline underline-offset-4 disabled:opacity-50"
             >
-              건너뛰기
+              {isCreating ? "준비 중..." : "건너뛰기"}
             </button>
           </div>
           <div className="flex-1 flex flex-col items-center justify-center relative py-6 px-6">
@@ -316,10 +538,15 @@ const ColorWorkFlow = ({
             </div>
           </div>
           <div className="p-6 safe-area-bottom w-full flex flex-col gap-3 relative z-50 mt-auto">
-            <Button size="lg" variant="white" onClick={skipGuide}>
-              이용해보기
+            <Button
+              size="lg"
+              variant="white"
+              onClick={startProject}
+              disabled={isCreating}
+            >
+              {isCreating ? "준비 중..." : "이용해보기"}
             </Button>
-            <Button size="lg" variant="white" onClick={onBack}>
+            <Button size="lg" variant="white" onClick={() => router.back()}>
               홈으로 돌아가기
             </Button>
           </div>
@@ -328,16 +555,18 @@ const ColorWorkFlow = ({
     }
   }
 
-  // Actual Flow (mode === 'actual')
-  const handleActualNext = () => setStep((prev) => prev + 1);
+  // ════════════════════════════════════════════════════════════════════════
+  // ACTUAL FLOW
+  // ════════════════════════════════════════════════════════════════════════
 
+  // Step 1: Palette selection
   if (step === 1) {
     return (
       <div className="flex flex-col h-full bg-white animate-fade-in relative pb-safe">
         <StatusBar theme="dark" />
         <div className="px-6 pt-12 pb-2">
           <button
-            onClick={() => (initialSession ? onBack() : setMode("guide"))}
+            onClick={() => isReentry ? router.replace("/inprogress") : router.back()}
             className="mb-6 p-2 -ml-2 rounded-full hover:bg-gray-100 w-fit transition-colors"
           >
             <ChevronLeft />
@@ -351,58 +580,57 @@ const ColorWorkFlow = ({
             는 어떤가요?
           </h1>
           <p className="text-gray-500 text-sm font-medium">
-            가장 끌리는 색상과 팔레트를 선택해주세요.
+            가장 끌리는 팔레트를 선택해주세요.
           </p>
         </div>
 
         <div className="flex-1 px-6 flex flex-col justify-center py-6">
-          <div className="flex justify-between items-end mb-4">
-            <span className="text-xs font-bold text-gray-400">추천 팔레트</span>
+          <div className="relative">
             <button
-              onClick={handleRefreshColors}
-              className="flex items-center gap-1.5 text-[10px] font-bold text-gray-500 bg-gray-50 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors active:scale-95"
+              onClick={handleRefreshPalettes}
+              disabled={isPalettesLoading}
+              className="absolute -top-7 right-0 flex items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-gray-600 transition-colors active:scale-95 disabled:opacity-50"
             >
-              <RefreshCcw size={12} /> 새로고침
+              <RefreshCcw size={11} /> 새로고침
             </button>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            {colors.map((color, i) => (
-              <ColorBlockSelector
-                key={i}
-                color={color}
-                isSelected={selectedColor?.name === color.name}
-                onClick={() => setSelectedColor(color)}
-              />
-            ))}
+            <div className="grid grid-cols-3 gap-4">
+              {apiPalettes.map((palette, i) => {
+                const repColor =
+                  palette.colors[Math.floor(palette.colors.length / 2)];
+                return (
+                  <ColorBlockSelector
+                    key={i}
+                    color={{ name: palette.seed, hex: repColor?.hex }}
+                    isSelected={selectedApiPalette?.seed === palette.seed}
+                    onClick={() => handleSelectPalette(palette)}
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
 
         <div className="p-6 safe-area-bottom bg-gradient-to-t from-white via-white/80 to-transparent pt-4">
           <Button
             size="lg"
-            disabled={!selectedColor}
-            onClick={handleActualNext}
+            disabled={!selectedApiPalette}
+            onClick={() => setStep(2)}
           >
-            {selectedColor
-              ? `${selectedColor.name} 무드로 시작하기`
-              : "색상을 선택해주세요"}
+            {selectedApiPalette ? "선택 완료" : "색상을 선택해주세요"}
           </Button>
         </div>
       </div>
     );
   }
 
+  // Step 2: Grid selection
   if (step === 2) {
-    const handleGridSelect = (size: number) => {
-      setGridSize(size);
-      setSlots(Array(size).fill(null));
-    };
     return (
       <div className="flex flex-col h-full bg-white animate-slide-left relative">
         <StatusBar theme="dark" />
         <div className="px-6 pt-12 pb-6">
           <button
-            onClick={() => setStep(1)}
+            onClick={() => isReentry ? router.replace("/inprogress") : setStep(1)}
             className="mb-6 p-2 -ml-2 rounded-full hover:bg-gray-100 w-fit"
           >
             <ChevronLeft />
@@ -414,44 +642,54 @@ const ColorWorkFlow = ({
           </h1>
           <p className="text-gray-500">원하는 레이아웃을 선택해주세요.</p>
         </div>
-        <div className="flex-1 px-6 flex flex-col justify-center gap-6 overflow-y-auto no-scrollbar">
-          <button
-            onClick={() => handleGridSelect(4)}
-            className={`w-full border-2 rounded-3xl p-6 flex flex-col items-center justify-center gap-4 transition-all shrink-0 ${
-              gridSize === 4
-                ? `border-${selectedColor?.text?.split("-")[1]}-500 bg-${
-                    selectedColor?.text?.split("-")[1]
-                  }-50 shadow-xl`
-                : "border-gray-100 hover:border-gray-200"
-            }`}
-          >
-            <div className="grid grid-cols-2 gap-2 w-24 h-24">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="bg-gray-200 rounded-lg w-full h-full" />
-              ))}
-            </div>
-            <span className="font-bold text-lg">2 x 2 (4장)</span>
-          </button>
-          <button
-            onClick={() => handleGridSelect(9)}
-            className={`w-full border-2 rounded-3xl p-6 flex flex-col items-center justify-center gap-4 transition-all shrink-0 ${
-              gridSize === 9
-                ? `border-${selectedColor?.text?.split("-")[1]}-500 bg-${
-                    selectedColor?.text?.split("-")[1]
-                  }-50 shadow-xl`
-                : "border-gray-100 hover:border-gray-200"
-            }`}
-          >
-            <div className="grid grid-cols-3 gap-2 w-24 h-24">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
-                <div key={i} className="bg-gray-200 rounded-md w-full h-full" />
-              ))}
-            </div>
-            <span className="font-bold text-lg">3 x 3 (9장)</span>
-          </button>
+        <div className="flex-1 px-6 flex flex-col justify-center gap-4 overflow-y-auto no-scrollbar">
+          {[
+            { type: "G2" as const, count: 4, cols: 2, rows: 2, label: "4장" },
+            { type: "G6" as const, count: 6, cols: 2, rows: 3, label: "6장" },
+            { type: "G3" as const, count: 9, cols: 3, rows: 3, label: "9장" },
+          ].map(({ type, count, cols, rows, label }) => (
+            <button
+              key={type}
+              onClick={() => handleGridSelect(type)}
+              className={`w-full border-2 rounded-3xl p-5 flex items-center gap-6 transition-all shrink-0 ${
+                gridType === type
+                  ? "border-black bg-gray-50 shadow-xl"
+                  : "border-gray-100 hover:border-gray-200"
+              }`}
+            >
+              <div
+                className="grid gap-1.5 shrink-0"
+                style={{
+                  gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                  width: cols * 20 + (cols - 1) * 6,
+                  height: rows * 20 + (rows - 1) * 6,
+                }}
+              >
+                {Array(count)
+                  .fill(0)
+                  .map((_, i) => (
+                    <div key={i} className="bg-gray-200 rounded w-5 h-5" />
+                  ))}
+              </div>
+              <span className="font-black text-xl">{label}</span>
+              {gridType === type && (
+                <div className="ml-auto w-5 h-5 rounded-full bg-black flex items-center justify-center shrink-0">
+                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                    <path
+                      d="M1 4L3.5 6.5L9 1"
+                      stroke="white"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+              )}
+            </button>
+          ))}
         </div>
         <div className="p-6 pb-safe safe-area-bottom bg-white">
-          <Button size="lg" disabled={!gridSize} onClick={handleActualNext}>
+          <Button size="lg" disabled={!gridType} onClick={() => setStep(3)}>
             시작하기
           </Button>
         </div>
@@ -459,146 +697,256 @@ const ColorWorkFlow = ({
     );
   }
 
+  // Step 3: Upload photos
   if (step === 3) {
-    const handleSlotClick = (index: number) => {
-      if (isProcessing) return;
-      setIsProcessing(true);
-      setTimeout(() => {
-        const newSlots = [...slots];
-        newSlots[index] = { type: "image", id: Date.now() };
-        setSlots(newSlots);
-        setIsProcessing(false);
-      }, 600);
-    };
-
-    const handleSaveAndExit = () => {
-      const sessionData: SessionData = {
-        id: initialSession?.id || `ip_${Date.now()}`,
-        templateId: "t1",
-        title: "ColorGrab",
-        step,
-        selectedColor: selectedColor!,
-        gridSize: gridSize!,
-        slots,
-        lastModified: "방금 전",
-      };
-      onSaveSession(sessionData);
-      onBack();
-    };
-
-    const getRandomImage = (index: number) => {
-      const images = [
-        "https://images.unsplash.com/photo-1516975080664-ed2fc6a32937?w=400",
-        "https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=400",
-        "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400",
-        "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400",
-        "https://images.unsplash.com/photo-1555529733-0e670560f7e1?w=400",
-        "https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=400",
-        "https://images.unsplash.com/photo-1570176527506-69a478c575a7?w=400",
-        "https://images.unsplash.com/photo-1545893835-aba7a139478e?w=400",
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400",
-      ];
-      return images[
-        (index + (selectedColor?.name.length || 0)) % images.length
-      ];
-    };
-
     const filledCount = slots.filter(Boolean).length;
+    const totalSlots = slots.length;
+    const isComplete = filledCount === totalSlots && totalSlots > 0;
 
     return (
       <div className="flex flex-col h-full bg-white animate-slide-left relative">
         <StatusBar theme="dark" />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
         <div className="px-4 py-3 flex justify-between items-center border-b border-gray-100">
           <button
-            onClick={() => setStep(2)}
+            onClick={() =>
+              isReentry ? router.replace("/inprogress") : setStep(2)
+            }
             className="p-2 -ml-2 rounded-full hover:bg-gray-100"
           >
             <ChevronLeft />
           </button>
           <span className="font-bold">
-            {filledCount} / {gridSize} 채움
+            {filledCount} / {totalSlots} 채움
           </span>
           <button
-            onClick={handleSaveAndExit}
+            onClick={async () => {
+              if (projectId) {
+                await projectService.updateTitle(
+                  projectId,
+                  "진행중인 템플릿을 확인해주세요"
+                );
+              }
+              queryClient.invalidateQueries({ queryKey: ["projects"] });
+              router.replace("/inprogress");
+            }}
             className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
           >
             임시저장
           </button>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gray-50 overflow-y-auto">
+          {selectedApiPalette &&
+            (() => {
+              const rep =
+                selectedApiPalette.colors[
+                  Math.floor(selectedApiPalette.colors.length / 2)
+                ];
+              return (
+                <div className="flex items-center gap-3 mb-4 bg-white rounded-2xl px-4 py-2.5 shadow-sm border border-gray-100">
+                  <div
+                    className="w-8 h-8 rounded-lg shrink-0"
+                    style={{ backgroundColor: rep?.hex }}
+                  />
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      선택한 색상
+                    </p>
+                    <p className="text-sm font-black text-gray-900">
+                      {selectedApiPalette.seed}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
           <div
-            className={`w-full aspect-square grid gap-2 p-2 rounded-2xl shadow-2xl bg-white ${
-              gridSize === 4 ? "grid-cols-2" : "grid-cols-3"
+            className={`w-4/5 grid gap-2 p-2 rounded-2xl shadow-2xl bg-white ${
+              gridType === "G3" ? "grid-cols-3" : "grid-cols-2"
             }`}
+            style={gridType === "G6" ? { aspectRatio: "2/3" } : undefined}
           >
             {slots.map((slot, i) => (
               <div
                 key={i}
-                onClick={() => handleSlotClick(i)}
+                onClick={() => uploadingIndex === null && handleSlotClick(i)}
                 className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer transition-all active:scale-95 ${
                   slot ? "bg-gray-800" : "bg-gray-100 hover:bg-gray-200"
                 } flex items-center justify-center`}
               >
-                {slot ? (
-                  <>
-                    <img
-                      src={getRandomImage(i)}
-                      alt="slot"
-                      className="w-full h-full object-cover opacity-60"
-                    />
-                    <div
-                      className={`absolute inset-0 ${selectedColor?.bg} mix-blend-color opacity-30`}
-                    />
-                  </>
+                {uploadingIndex === i ? (
+                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : slot?.url ? (
+                  <img
+                    src={slot.url}
+                    alt="slot"
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <Camera className="text-gray-400" />
-                )}
-                {isProcessing && !slot && (
-                  <div className="absolute inset-0 bg-white/50 flex items-center justify-center">
-                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                  </div>
                 )}
               </div>
             ))}
           </div>
-          <p className="mt-6 text-sm text-gray-500">
-            각 프레임을 눌러 사진을 채워주세요!
-          </p>
+          <div className="mt-6 flex items-center gap-3">
+            <p className="text-sm text-gray-500">
+              각 프레임을 눌러 사진을 채워주세요!
+            </p>
+            {isReentry && (
+              <button
+                onClick={() => setFrameModalStep("confirm")}
+                className="text-xs font-bold text-gray-400 underline underline-offset-2 hover:text-gray-600 transition-colors shrink-0"
+              >
+                프레임 바꾸기
+              </button>
+            )}
+          </div>
         </div>
         <div className="p-6 pb-safe safe-area-bottom bg-white border-t border-gray-100">
           <Button
             size="lg"
-            disabled={filledCount < (gridSize || 0)}
-            onClick={handleActualNext}
+            disabled={!isComplete || isSubmitting || !projectId}
+            onClick={handleComplete}
           >
-            완성하기
+            {isSubmitting
+              ? "렌더링 중..."
+              : !projectId
+              ? "프로젝트 준비 중..."
+              : "완성하기"}
           </Button>
         </div>
+
+        {frameModalStep !== "closed" && (
+          <div
+            className="absolute inset-0 z-50 flex items-end bg-black/40"
+            onClick={() => setFrameModalStep("closed")}
+          >
+            <div
+              className="bg-white w-full rounded-t-3xl p-6 pb-safe"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {frameModalStep === "confirm" ? (
+                <>
+                  <div className="flex flex-col items-center text-center mb-6">
+                    <div className="w-14 h-14 bg-orange-50 rounded-full flex items-center justify-center mb-4">
+                      <span className="text-2xl">⚠️</span>
+                    </div>
+                    <h2 className="text-xl font-black text-gray-900">
+                      프레임을 바꾸시겠어요?
+                    </h2>
+                    <p className="text-sm text-gray-500 font-medium mt-2">
+                      기존에 저장된 이미지가 모두 삭제됩니다.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setFrameModalStep("closed")}
+                      className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-2xl text-sm font-bold hover:bg-gray-200 transition-colors"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={() => setFrameModalStep("select")}
+                      className="flex-1 py-3 bg-black text-white rounded-2xl text-sm font-bold hover:bg-gray-800 transition-colors"
+                    >
+                      프레임 바꾸기
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-xl font-black mb-4">프레임 수 변경</h2>
+                  <div className="flex flex-col gap-3">
+                    {[
+                      {
+                        type: "G2" as const,
+                        count: 4,
+                        cols: 2,
+                        rows: 2,
+                        label: "4장",
+                      },
+                      {
+                        type: "G6" as const,
+                        count: 6,
+                        cols: 2,
+                        rows: 3,
+                        label: "6장",
+                      },
+                      {
+                        type: "G3" as const,
+                        count: 9,
+                        cols: 3,
+                        rows: 3,
+                        label: "9장",
+                      },
+                    ].map(({ type, count, cols, rows, label }) => (
+                      <button
+                        key={type}
+                        onClick={async () => {
+                          await handleGridSelect(type);
+                          setFrameModalStep("closed");
+                        }}
+                        className={`w-full border-2 rounded-2xl p-4 flex items-center gap-5 transition-all ${
+                          gridType === type
+                            ? "border-black bg-gray-50"
+                            : "border-gray-100 hover:border-gray-200"
+                        }`}
+                      >
+                        <div
+                          className="grid gap-1 shrink-0"
+                          style={{
+                            gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                            width: cols * 18 + (cols - 1) * 4,
+                            height: rows * 18 + (rows - 1) * 4,
+                          }}
+                        >
+                          {Array(count)
+                            .fill(0)
+                            .map((_, i) => (
+                              <div
+                                key={i}
+                                className="bg-gray-200 rounded w-[18px] h-[18px]"
+                              />
+                            ))}
+                        </div>
+                        <span className="font-black text-lg">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
+  // Step 4: Result
   if (step === 4) {
-    const getRandomImage = (index: number) => {
-      const images = [
-        "https://images.unsplash.com/photo-1516975080664-ed2fc6a32937?w=400",
-        "https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=400",
-        "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400",
-        "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400",
-        "https://images.unsplash.com/photo-1555529733-0e670560f7e1?w=400",
-        "https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=400",
-        "https://images.unsplash.com/photo-1570176527506-69a478c575a7?w=400",
-        "https://images.unsplash.com/photo-1545893835-aba7a139478e?w=400",
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400",
-      ];
-      return images[
-        (index + (selectedColor?.name.length || 0)) % images.length
-      ];
-    };
+    const resultColor = selectedApiPalette?.colors[0]?.hex ?? "#6366f1";
+    const isDone = renderJob?.status === "SUCCEEDED";
+    const isFailed = renderJob?.status === "FAILED";
+    const isRendering = !isDone && !isFailed;
+    const gridClass =
+      gridType === "G3"
+        ? "grid-cols-3 grid-rows-3"
+        : gridType === "G6"
+        ? "grid-cols-2 grid-rows-3"
+        : "grid-cols-2 grid-rows-2";
+    const aspectClass = gridType === "G6" ? "aspect-[2/3]" : "aspect-square";
 
     return (
       <div
-        className={`flex flex-col h-full ${selectedColor?.bg} text-white animate-fade-in relative`}
+        className="flex flex-col h-full text-white animate-fade-in relative"
+        style={{ backgroundColor: resultColor }}
       >
         <StatusBar theme="light" />
         <div className="px-4 py-3 flex justify-between items-center relative z-50">
@@ -609,53 +957,84 @@ const ColorWorkFlow = ({
             <ChevronLeft />
           </button>
           <span className="font-bold text-lg">ColorWork</span>
-          <div className="relative">
-            <button className="p-2 rounded-full hover:bg-white/20 transition-colors">
-              <MoreVertical size={20} />
-            </button>
-          </div>
+          <div className="w-10" />
         </div>
 
         <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto no-scrollbar">
-          <div className="bg-white p-3 rounded-xl shadow-2xl mb-6 transform hover:scale-[1.02] transition-transform duration-500 w-full max-w-[320px] aspect-square flex flex-col relative overflow-hidden ring-4 ring-white/20">
-            <div
-              className={`w-full h-full grid gap-1 overflow-hidden ${
-                gridSize === 4
-                  ? "grid-cols-2 grid-rows-2"
-                  : "grid-cols-3 grid-rows-3"
-              }`}
-            >
-              {slots.map((_, i) => (
-                <div
-                  key={i}
-                  className="relative w-full h-full bg-gray-200 overflow-hidden"
-                >
-                  <img
-                    src={getRandomImage(i)}
-                    alt="filled slot"
-                    className="w-full h-full object-cover"
-                  />
+          {/* 결과 이미지: 항상 표시 */}
+          <div
+            className={`bg-white p-3 rounded-xl shadow-2xl mb-4 w-full max-w-[320px] flex flex-col relative overflow-hidden ring-4 ring-white/20 ${aspectClass}`}
+          >
+            {isDone && renderJob?.resultUrl ? (
+              <img
+                src={renderJob.resultUrl}
+                alt="result"
+                className="w-full h-full object-cover rounded-lg"
+              />
+            ) : (
+              <div
+                className={`w-full h-full grid gap-1 overflow-hidden ${gridClass}`}
+              >
+                {slots.map((slot, i) => (
                   <div
-                    className={`absolute inset-0 ${selectedColor?.bg} mix-blend-color opacity-30`}
-                  />
-                  <div
-                    className={`absolute inset-0 ${selectedColor?.bg} mix-blend-multiply opacity-10`}
-                  />
-                </div>
-              ))}
-            </div>
+                    key={i}
+                    className="relative w-full h-full bg-gray-200 overflow-hidden"
+                  >
+                    {slot?.url && (
+                      <img
+                        src={slot.url}
+                        alt="filled slot"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* 렌더링 중 오버레이 */}
+            {isRendering && (
+              <div className="absolute inset-0 bg-black/20 flex items-center justify-center rounded-lg">
+                <div className="w-8 h-8 border-3 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
           </div>
+
           <p className="text-white/80 text-sm font-medium text-center drop-shadow-md">
-            #ColorWork #{selectedColor?.name} #{gridSize}cuts
+            #ColorWork #{selectedApiPalette?.colors[0]?.name ?? "mood"} #
+            {slots.length}cuts
           </p>
+
+          {isRendering && (
+            <p className="text-white/60 text-xs font-medium mt-2">
+              최종 이미지를 생성 중입니다...
+            </p>
+          )}
+          {isFailed && (
+            <p className="text-white/70 text-xs font-medium mt-2">
+              렌더링에 실패했습니다. 사진은 저장되어 있어요.
+            </p>
+          )}
         </div>
 
         <div className="p-6 pb-safe safe-area-bottom space-y-3 bg-gradient-to-t from-black/20 to-transparent">
-          <Button size="lg" variant="white" icon={Share2}>
+          {isDone && renderJob?.resultUrl && (
+            <Button
+              size="lg"
+              variant="white"
+              icon={Download}
+              onClick={async () => {
+                const url = await renderService.getDownloadUrl(renderJob.id);
+                window.open(url, "_blank");
+              }}
+            >
+              다운로드
+            </Button>
+          )}
+          <Button size="lg" variant="white" icon={Share2} disabled={!isDone}>
             공유하기
           </Button>
           <button
-            onClick={onBack}
+            onClick={() => router.replace("/")}
             className="w-full py-3 text-white text-sm font-bold opacity-80 hover:opacity-100"
           >
             홈으로

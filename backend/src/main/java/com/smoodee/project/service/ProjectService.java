@@ -52,6 +52,14 @@ public class ProjectService {
   }
 
   @Transactional
+  public Project updateTitle(Long projectId, Long userId, String title) {
+    Project project = getProject(projectId);
+    requireOwner(project, userId);
+    project.updateTitle(title);
+    return project;
+  }
+
+  @Transactional
   public void deleteProject(Long projectId, Long userId) {
     Project project = getProject(projectId);
     requireOwner(project, userId);

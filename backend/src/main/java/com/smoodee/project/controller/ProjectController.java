@@ -2,9 +2,11 @@ package com.smoodee.project.controller;
 
 import com.smoodee.global.dto.ApiResponse;
 import com.smoodee.global.security.CustomUserDetails;
+import com.smoodee.personal.service.ColorworkService;
 import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.dto.ProjectResponse;
 import com.smoodee.project.service.ProjectService;
+import com.smoodee.template.domain.TemplateType;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
@@ -14,7 +16,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProjectController {
 
   private final ProjectService projectService;
+  private final ColorworkService colorworkService;
 
   @Operation(
       summary = "프로젝트 목록 조회",
@@ -45,7 +50,15 @@ public class ProjectController {
     } else {
       result =
           projectService.listInProgress(principal.getUserId(), projectType).stream()
-              .map(ProjectResponse::from)
+              .map(project -> {
+                if (project.getTemplateType() == TemplateType.COLORWORK) {
+                  int[] progress = colorworkService.getFrameProgress(project.getId());
+                  String thumbnailUrl = colorworkService.getThumbnailUrl(project.getId(), principal.getUserId());
+                  String paletteColor = colorworkService.getPaletteColor(project.getId());
+                  return ProjectResponse.from(project, progress[0], progress[1], thumbnailUrl, paletteColor);
+                }
+                return ProjectResponse.from(project);
+              })
               .collect(Collectors.toList());
     }
     return ResponseEntity.ok(ApiResponse.of(result));
@@ -59,6 +72,19 @@ public class ProjectController {
         ApiResponse.of(
             ProjectResponse.from(
                 projectService.getProjectWithOwnerCheck(projectId, principal.getUserId()))));
+  }
+
+  @Operation(summary = "프로젝트 제목 수정")
+  @PatchMapping("/{projectId}/title")
+  public ResponseEntity<ApiResponse<ProjectResponse>> updateTitle(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable Long projectId,
+      @RequestBody java.util.Map<String, String> body) {
+    String title = body.get("title");
+    return ResponseEntity.ok(
+        ApiResponse.of(
+            ProjectResponse.from(
+                projectService.updateTitle(projectId, principal.getUserId(), title))));
   }
 
   @Operation(summary = "프로젝트 삭제")

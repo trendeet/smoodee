@@ -57,7 +57,11 @@ public class PersonalRenderWorker {
           frameRepository.findByProjectIdOrderByFrameIndex(job.getProjectId());
 
       GridType gridType = config.getGridType();
-      int required = (gridType == GridType.G2) ? 4 : 9;
+      int required = switch (gridType) {
+        case G2 -> 4;
+        case G6 -> 6;
+        case G3 -> 9;
+      };
       if (frames.size() < required) {
         throw new IllegalStateException(
             "프레임 업로드가 완료되지 않았습니다. 필요: " + required + ", 현재: " + frames.size());
@@ -108,8 +112,8 @@ public class PersonalRenderWorker {
   }
 
   private BufferedImage compose(List<BufferedImage> images, GridType gridType, String paletteJson) {
-    int cols = (gridType == GridType.G2) ? 2 : 3;
-    int rows = cols;
+    int cols = (gridType == GridType.G2 || gridType == GridType.G6) ? 2 : 3;
+    int rows = (gridType == GridType.G6) ? 3 : (gridType == GridType.G2) ? 2 : 3;
 
     BufferedImage output =
         new BufferedImage(OUTPUT_WIDTH, OUTPUT_HEIGHT, BufferedImage.TYPE_INT_RGB);

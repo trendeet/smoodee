@@ -1,22 +1,19 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Menu, Search, MoreVertical, Share2, Download, Layers } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
-import { MOCK_RECENT } from "@/lib/mock-data/archive";
+import { useUI } from "@/lib/context/UIContext";
+import { useProjects } from "@/hooks/useProjects";
 
-interface RecentScreenProps {
-  navigateTo: (screen: string, params?: any) => void;
-  activeTab: string;
-  onOpenMenu: () => void;
-}
-
-const RecentScreen = ({ navigateTo, activeTab, onOpenMenu }: RecentScreenProps) => {
+const RecentScreen = () => {
+  const { openMenu } = useUI();
   const [searchText, setSearchText] = useState("");
-  if (activeTab !== "recent") return null;
+  const { data: recentProjects = [], isLoading } = useProjects({ tab: "RECENT" });
 
-  const filteredItems = MOCK_RECENT.filter(
-    (item) => item.status === "complete" && item.title.includes(searchText)
+  const filteredItems = recentProjects.filter(
+    (item) => (item.title ?? "").toLowerCase().includes(searchText.toLowerCase())
   );
 
   return (
@@ -25,7 +22,7 @@ const RecentScreen = ({ navigateTo, activeTab, onOpenMenu }: RecentScreenProps) 
       <div className="px-4 pt-4 pb-2 sticky top-0 bg-white/95 backdrop-blur-md z-10">
         <div className="flex items-center gap-3 mb-4">
           <button
-            onClick={onOpenMenu}
+            onClick={openMenu}
             className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors"
           >
             <Menu size={24} />
@@ -49,16 +46,22 @@ const RecentScreen = ({ navigateTo, activeTab, onOpenMenu }: RecentScreenProps) 
         </div>
       </div>
       <div className="p-4 space-y-4">
-        {filteredItems.length > 0 ? (
+        {isLoading ? (
+          Array(3).fill(0).map((_, i) => (
+            <div key={i} className="h-24 bg-gray-100 rounded-2xl animate-pulse" />
+          ))
+        ) : filteredItems.length > 0 ? (
           filteredItems.map((item) => (
             <div
               key={item.id}
               className="flex gap-4 p-3 border border-gray-100 rounded-2xl hover:bg-gray-50 transition-colors cursor-pointer group"
             >
-              <div
-                className={`w-20 h-24 rounded-xl bg-gradient-to-br ${item.thumb} shrink-0 shadow-sm relative overflow-hidden`}
-              >
-                <div className="absolute inset-0 bg-white/30 backdrop-blur-sm m-2 rounded-lg" />
+              <div className="w-20 h-24 rounded-xl bg-gradient-to-br from-gray-300 to-gray-500 shrink-0 shadow-sm relative overflow-hidden">
+                {item.thumbnailUrl ? (
+                  <img src={item.thumbnailUrl} alt={item.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 bg-white/30 backdrop-blur-sm m-2 rounded-lg" />
+                )}
               </div>
               <div className="flex flex-col justify-center flex-1">
                 <div className="flex justify-between items-start mb-1">
@@ -68,7 +71,7 @@ const RecentScreen = ({ navigateTo, activeTab, onOpenMenu }: RecentScreenProps) 
                   </button>
                 </div>
                 <p className="text-xs text-gray-400 font-medium mb-3">
-                  {item.date}
+                  {new Date(item.updatedAt).toLocaleDateString("ko-KR")}
                 </p>
                 <div className="flex gap-2">
                   <button className="p-1.5 bg-gray-100 rounded-full text-gray-500 hover:bg-blue-50 hover:text-blue-500">

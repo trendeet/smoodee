@@ -13,86 +13,85 @@ import {
   Sparkles,
   UserPlus,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
 import TemplateCard from "@/features/templates/components/TemplateCard";
-import { MOCK_TEMPLATES } from "@/lib/mock-data/templates";
-import useTimeout from "@/hooks/useTimeout";
+import { useScraps } from "@/hooks/useScraps";
+import { useNotifications } from "@/hooks/useNotifications";
+import { useTemplates } from "@/hooks/useTemplates";
+import { useUI } from "@/lib/context/UIContext";
+import { TemplateResponse } from "@/lib/api/types";
 
-interface HomeScreenProps {
-  navigateTo: (screen: string, params?: any) => void;
-  activeTab: string;
-  onOpenMenu: () => void;
-  scrappedTemplates: string[];
-  toggleScrap: (id: string) => void;
-}
+const FALLBACK_TEMPLATES: TemplateResponse[] = [
+  {
+    id: 1,
+    type: "COLORWORK",
+    title: "ColorGrab",
+    tags: ["개인"],
+    description: "나만의 색상으로 사진 기록",
+  },
+  {
+    id: 2,
+    type: "DAYSHARE",
+    title: "하루 공유",
+    tags: ["그룹"],
+    description: "그룹과 함께 하루 기록",
+  },
+];
 
-const HomeScreen = ({
-  navigateTo,
-  activeTab,
-  onOpenMenu,
-  scrappedTemplates,
-  toggleScrap,
-}: HomeScreenProps) => {
-  const [filter, setFilter] = useState("All");
-  const [isLoading, setIsLoading] = useState(true);
+const HomeScreen = () => {
+  const router = useRouter();
+  const { isScrapped, toggle } = useScraps();
+  const { data: notifData, markRead } = useNotifications();
+  const { data: rawTemplates, isLoading: templatesLoading } = useTemplates();
+  const templatesData =
+    rawTemplates && rawTemplates.length > 0
+      ? rawTemplates
+      : !templatesLoading
+      ? FALLBACK_TEMPLATES
+      : [];
+  const { openMenu } = useUI();
+  const [filter, setFilter] = useState("전체");
+  const [searchText, setSearchText] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
 
-  useTimeout(() => setIsLoading(false), 1200);
-  const filters = ["All", "Story", "Feed", "Group", "Trending"];
+  const filters = ["전체", "개인", "그룹"];
 
-  const notifications = [
-    {
-      id: 1,
-      type: "success",
-      icon: <Check size={16} />,
-      color: "bg-green-100 text-green-600",
-      text: "'모닝루틴 인증 ☀️' 그룹이 100% 달성되었어요! 지금 보관함으로 옮길 수 있습니다.",
-      time: "10분 전",
-    },
-    {
-      id: 2,
-      type: "activity",
-      icon: <Camera size={16} />,
-      color: "bg-blue-100 text-blue-600",
-      text: "김대리님이 '점심 기록방 🍱'에 오늘의 점심을 인증했습니다.",
-      time: "1시간 전",
-    },
-    {
-      id: 3,
-      type: "system",
-      icon: <Sparkles size={16} />,
-      color: "bg-purple-100 text-purple-600",
-      text: "새로운 트렌딩 템플릿 '겨울 바다 무드'가 추가되었습니다. 구경해보세요!",
-      time: "3시간 전",
-    },
-    {
-      id: 4,
-      type: "group",
+  const notifications = notifData?.items ?? [];
+
+  const notifIcon = (type: string) => {
+    if (type === "GROUP_COMPLETE")
+      return {
+        icon: <Check size={16} />,
+        color: "bg-green-100 text-green-600",
+      };
+    if (type === "SLOT_FILLED")
+      return { icon: <Camera size={16} />, color: "bg-blue-100 text-blue-600" };
+    if (type === "NEW_TEMPLATE")
+      return {
+        icon: <Sparkles size={16} />,
+        color: "bg-purple-100 text-purple-600",
+      };
+    return {
       icon: <UserPlus size={16} />,
       color: "bg-orange-100 text-orange-600",
-      text: "'하루 공유' 그룹에 새로운 멤버 '갓생'님이 참여했습니다.",
-      time: "1일 전",
-    },
-  ];
-
-  if (activeTab !== "home") return null;
+    };
+  };
 
   return (
     <div className="flex flex-col h-full bg-white pb-safe overflow-y-auto no-scrollbar relative">
       <StatusBar theme="dark" />
       <div className="px-4 pb-2 sticky top-0 bg-white/95 backdrop-blur-md z-10 border-b border-gray-100/50">
-        <div className="flex items-center justify-between mb-3 pt-1">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <button
-              onClick={onOpenMenu}
+              onClick={openMenu}
               className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors"
             >
               <Menu size={24} />
             </button>
-            <h1 className="text-2xl font-black tracking-tight text-gray-900">
-              Templates
-            </h1>
+            <h1 className="text-xl font-black tracking-tight">Smoodee</h1>
           </div>
           <Button
             variant="ghost"
@@ -103,7 +102,7 @@ const HomeScreen = ({
           />
         </div>
         <button
-          onClick={() => navigateTo("guide")}
+          onClick={() => router.push("/guide")}
           className="w-full mb-3 bg-gray-900 text-white rounded-2xl p-3 flex items-center justify-between shadow-lg active:scale-98 transition-transform"
         >
           <div className="flex items-center gap-3">
@@ -125,6 +124,8 @@ const HomeScreen = ({
             />
             <input
               type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
               placeholder="템플릿 검색..."
               className="w-full bg-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black/5 focus:bg-white transition-all shadow-sm"
             />
@@ -148,34 +149,64 @@ const HomeScreen = ({
       </div>
       <div className="px-4 mt-6">
         <h2 className="font-bold text-lg mb-4 flex items-center gap-2 text-gray-900">
-          {filter === "All" ? "이번 주 인기" : `${filter} 템플릿`}
+          {searchText
+            ? `"${searchText}" 검색 결과`
+            : filter === "전체"
+            ? "이번 주 인기"
+            : `${filter} 템플릿`}
         </h2>
         <div className="grid grid-cols-2 gap-4">
-          {isLoading
-            ? Array(4)
-                .fill(0)
-                .map((_, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="aspect-[4/5] bg-gray-100 rounded-2xl animate-pulse" />
-                    <div className="h-4 bg-gray-100 rounded w-3/4 animate-pulse" />
-                    <div className="h-3 bg-gray-100 rounded w-1/2 animate-pulse" />
+          {templatesLoading && (
+            <div className="col-span-2 py-12 flex items-center justify-center text-gray-400 text-sm">
+              불러오는 중...
+            </div>
+          )}
+          {!templatesLoading &&
+            (() => {
+              const filtered = templatesData.filter((t) => {
+                const tags = Array.isArray(t.tags) ? t.tags : [];
+                const matchesFilter =
+                  filter === "전체"
+                    ? true
+                    : filter === "개인"
+                    ? tags.includes("개인") || t.type === "COLORWORK"
+                    : filter === "그룹"
+                    ? tags.includes("그룹") || t.type === "DAYSHARE"
+                    : tags.includes(filter);
+
+                const q = searchText.toLowerCase();
+                const matchesSearch =
+                  !q ||
+                  (t.title ?? "").toLowerCase().includes(q) ||
+                  (t.description ?? "").toLowerCase().includes(q) ||
+                  tags.some((tag) => tag.toLowerCase().includes(q));
+
+                return matchesFilter && matchesSearch;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="col-span-2 py-16 flex flex-col items-center justify-center text-gray-400">
+                    <Search size={28} className="mb-3 opacity-30" />
+                    <p className="text-sm font-medium">검색 결과가 없어요</p>
                   </div>
-                ))
-            : MOCK_TEMPLATES.filter(
-                (t) => filter === "All" || t.tags.includes(filter)
-              ).map((t) => (
+                );
+              }
+
+              return filtered.map((t) => (
                 <TemplateCard
                   key={t.id}
                   template={t}
                   onClick={() => {
-                    if (t.id === "t1") navigateTo("colorwork");
-                    else if (t.id === "t_day") navigateTo("day_share");
-                    else navigateTo("detail", t);
+                    if (t.type === "COLORWORK") router.push("/colorwork");
+                    else if (t.type === "DAYSHARE") router.push("/day_share");
+                    else router.push("/");
                   }}
-                  isScrapped={scrappedTemplates.includes(t.id)}
-                  onScrap={toggleScrap}
+                  isScrapped={isScrapped(t.type)}
+                  onScrap={() => toggle(t.type)}
                 />
-              ))}
+              ));
+            })()}
         </div>
       </div>
 
@@ -195,26 +226,39 @@ const HomeScreen = ({
           </div>
 
           <div className="flex-1 overflow-y-auto p-2">
-            {notifications.map((noti) => (
-              <div
-                key={noti.id}
-                className="flex gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-colors cursor-pointer active:scale-[0.98]"
-              >
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${noti.color}`}
-                >
-                  {noti.icon}
-                </div>
-                <div className="flex-1 border-b border-gray-50 pb-4">
-                  <p className="text-sm font-medium text-gray-900 leading-snug break-keep mb-1">
-                    {noti.text}
-                  </p>
-                  <span className="text-xs font-bold text-gray-400">
-                    {noti.time}
-                  </span>
-                </div>
+            {notifications.length > 0 ? (
+              notifications.map((noti) => {
+                const { icon, color } = notifIcon(noti.type);
+                return (
+                  <div
+                    key={noti.id}
+                    onClick={() => markRead.mutate(noti.id)}
+                    className={`flex gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-colors cursor-pointer active:scale-[0.98] ${
+                      !noti.read ? "bg-blue-50/30" : ""
+                    }`}
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${color}`}
+                    >
+                      {icon}
+                    </div>
+                    <div className="flex-1 border-b border-gray-50 pb-4">
+                      <p className="text-sm font-medium text-gray-900 leading-snug break-keep mb-1">
+                        {noti.message}
+                      </p>
+                      <span className="text-xs font-bold text-gray-400">
+                        {new Date(noti.createdAt).toLocaleDateString("ko-KR")}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <Bell size={32} className="mb-3 opacity-20" />
+                <p className="text-sm font-medium">새로운 알림이 없습니다</p>
               </div>
-            ))}
+            )}
 
             <div className="pt-8 pb-12 flex flex-col items-center justify-center opacity-60">
               <div className="w-1 h-1 bg-gray-300 rounded-full mb-1"></div>

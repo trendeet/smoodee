@@ -25,6 +25,9 @@ public class Project extends BaseTimeEntity {
   @Column(nullable = false)
   private Long userId;
 
+  @Column(length = 100)
+  private String title;
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
   private ProjectType type;
@@ -42,15 +45,21 @@ public class Project extends BaseTimeEntity {
   @Builder
   public Project(
       Long userId,
+      String title,
       ProjectType type,
       TemplateType templateType,
       ProjectStatus status,
       LocalDateTime expiresAt) {
     this.userId = userId;
+    this.title = title;
     this.type = type;
     this.templateType = templateType;
     this.status = status;
     this.expiresAt = expiresAt;
+  }
+
+  public void updateTitle(String title) {
+    this.title = title;
   }
 
   public void transitionTo(ProjectStatus newStatus) {

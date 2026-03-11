@@ -32,9 +32,9 @@ public class AssetController {
       @AuthenticationPrincipal CustomUserDetails principal,
       @PathVariable Long projectId,
       @RequestParam("file") MultipartFile file) {
-    return ResponseEntity.ok(
-        ApiResponse.of(
-            AssetResponse.from(assetService.upload(projectId, principal.getUserId(), file))));
+    var asset = assetService.upload(projectId, principal.getUserId(), file);
+    String url = assetService.generateDownloadUrl(asset.getId(), principal.getUserId());
+    return ResponseEntity.ok(ApiResponse.of(AssetResponse.from(asset, url)));
   }
 
   @Operation(summary = "에셋 메타 조회")

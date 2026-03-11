@@ -3,6 +3,7 @@ package com.smoodee.personal.dto;
 import com.smoodee.personal.domain.PersonalColorworkConfig;
 import com.smoodee.personal.domain.PersonalFrame;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.Builder;
 import lombok.Getter;
@@ -19,14 +20,17 @@ public class ColorworkStateResponse {
   private final List<FrameInfo> frames;
 
   public static ColorworkStateResponse of(
-      PersonalColorworkConfig config, List<PersonalFrame> frames) {
+      PersonalColorworkConfig config, List<PersonalFrame> frames, Map<Long, String> assetUrlMap) {
     return ColorworkStateResponse.builder()
         .projectId(config.getProjectId())
         .gridType(config.getGridType() != null ? config.getGridType().name() : null)
         .paletteSeed(config.getPaletteSeed())
         .selectedPaletteJson(config.getSelectedPaletteJson())
         .howtoSeen(config.isHowtoSeen())
-        .frames(frames.stream().map(FrameInfo::from).collect(Collectors.toList()))
+        .frames(
+            frames.stream()
+                .map(f -> FrameInfo.of(f, assetUrlMap.get(f.getAssetId())))
+                .collect(Collectors.toList()))
         .build();
   }
 
@@ -35,11 +39,13 @@ public class ColorworkStateResponse {
   public static class FrameInfo {
     private final int frameIndex;
     private final Long assetId;
+    private final String assetUrl;
 
-    public static FrameInfo from(PersonalFrame frame) {
+    public static FrameInfo of(PersonalFrame frame, String assetUrl) {
       return FrameInfo.builder()
           .frameIndex(frame.getFrameIndex())
           .assetId(frame.getAssetId())
+          .assetUrl(assetUrl)
           .build();
     }
   }

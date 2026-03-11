@@ -10,4 +10,6 @@ public interface PersonalFrameRepository extends JpaRepository<PersonalFrame, Lo
   List<PersonalFrame> findByProjectIdOrderByFrameIndex(Long projectId);
 
   Optional<PersonalFrame> findByProjectIdAndFrameIndex(Long projectId, int frameIndex);
+
+  void deleteByProjectId(Long projectId);
 }

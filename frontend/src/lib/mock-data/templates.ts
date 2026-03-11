@@ -17,7 +17,7 @@ export const MOCK_TEMPLATES: Template[] = [
     time: "Custom",
     req: "9장",
     type: "Special",
-    tags: ["Trending", "Special"],
+    tags: ["개인"],
     thumbGradient: "from-red-500 via-red-600 to-red-700",
   },
   {
@@ -27,7 +27,7 @@ export const MOCK_TEMPLATES: Template[] = [
     time: "Day",
     req: "영상 6개",
     type: "Group",
-    tags: ["Group", "New"],
+    tags: ["그룹"],
     thumbGradient: "from-blue-400 to-cyan-300",
   },
 ];

@@ -2,7 +2,8 @@ import React from "react";
 
 interface ColorBlock {
   name: string;
-  bg: string;
+  bg?: string;
+  hex?: string;
 }
 
 interface ColorBlockSelectorProps {
@@ -21,7 +22,10 @@ const ColorBlockSelector = ({ color, isSelected, onClick }: ColorBlockSelectorPr
             : "shadow-sm border border-gray-100 hover:shadow-md z-0"
         }`}
   >
-    <div className={`w-full aspect-square ${color.bg}`} />
+    <div
+      className={`w-full aspect-square ${color.hex ? "" : color.bg}`}
+      style={color.hex ? { backgroundColor: color.hex } : undefined}
+    />
     <div className="pt-2 pb-0.5 flex justify-center items-center text-center">
       <span
         className={`text-[10px] font-black tracking-widest uppercase transition-colors ${

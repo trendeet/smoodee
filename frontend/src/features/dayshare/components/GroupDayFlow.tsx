@@ -1,66 +1,43 @@
+"use client";
+
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronLeft, Check } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
-import { DAY_SHARE_SLOTS } from "@/lib/mock-data/groups";
-import { Group } from "@/lib/mock-data/groups";
-import { Template } from "@/lib/mock-data/templates";
+import { groupService } from "@/lib/api/groupService";
+import { useApp } from "@/lib/context/AppContext";
 
-interface GroupDayFlowProps {
-  onBack: () => void;
-  onCreateGroup: (newGroup: Group) => void;
-  template?: Template | null;
-}
+const GroupDayFlow = () => {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { setSelectedGroup } = useApp();
 
-const GroupDayFlow = ({ onBack, onCreateGroup, template }: GroupDayFlowProps) => {
   const [memberCount, setMemberCount] = useState(2);
-  const [groupTitle, setGroupTitle] = useState(
-    template ? `${template.title} 그룹` : "하루 공유 🌅"
-  );
+  const [groupTitle, setGroupTitle] = useState("하루 공유 🌅");
+  const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreate = () => {
-    const mockMembers: { name: string; role: string; avatar: string; status: string }[] = [];
-    const roles = ["나", "Friend 1", "Friend 2", "Friend 3"];
-    const colors = [
-      "bg-gray-900",
-      "bg-blue-500",
-      "bg-green-500",
-      "bg-purple-500",
-    ];
-
-    for (let i = 0; i < memberCount; i++) {
-      mockMembers.push({
-        name: roles[i],
-        role: i === 0 ? "Owner" : "Member",
-        avatar: colors[i],
-        status: i === 0 ? "기록 시작!" : "함께해요",
+  const handleCreate = async () => {
+    if (!groupTitle.trim() || isCreating) return;
+    setIsCreating(true);
+    try {
+      const group = await groupService.createGroup({
+        name: groupTitle.trim(),
+        memberCount,
       });
+      // Invalidate group projects list
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      // Navigate to group screen
+      if (group.projectId) {
+        setSelectedGroup({ id: group.id, projectId: group.projectId, name: group.name });
+        router.push("/inprogress");
+      } else {
+        router.push("/inprogress");
+      }
+    } finally {
+      setIsCreating(false);
     }
-
-    const newGroup: Group = {
-      id: `g${Date.now()}`,
-      title: groupTitle,
-      members: memberCount,
-      status: "active",
-      progress: 0,
-      theme: template?.id === "t1" ? "bg-red-50" : "bg-blue-50",
-      icon: template?.id === "t1" ? "🎨" : "🌅",
-      description:
-        template?.id === "t1"
-          ? "나만의 컬러 팔레트를 그룹과 함께 채워보세요!"
-          : "우리의 하루를 영상으로 기록했어요.",
-      type: template?.id || "day_share",
-      memberList: mockMembers,
-      slots: DAY_SHARE_SLOTS.map((s) => ({
-        id: `slot_${s.id}`,
-        label: s.label,
-        time: s.time,
-        user: "나",
-        status: "empty",
-        color: "bg-blue-500",
-      })),
-    };
-    onCreateGroup(newGroup);
   };
 
   return (
@@ -68,7 +45,7 @@ const GroupDayFlow = ({ onBack, onCreateGroup, template }: GroupDayFlowProps) =>
       <StatusBar theme="dark" />
       <div className="px-6 pt-12 pb-6">
         <button
-          onClick={onBack}
+          onClick={() => router.back()}
           className="mb-6 p-2 -ml-2 rounded-full hover:bg-gray-100 w-fit"
         >
           <ChevronLeft />
@@ -130,8 +107,8 @@ const GroupDayFlow = ({ onBack, onCreateGroup, template }: GroupDayFlowProps) =>
         </div>
       </div>
       <div className="p-6 pb-safe safe-area-bottom">
-        <Button size="lg" onClick={handleCreate} disabled={!groupTitle.trim()}>
-          그룹 만들기
+        <Button size="lg" onClick={handleCreate} disabled={!groupTitle.trim() || isCreating}>
+          {isCreating ? "생성 중..." : "그룹 만들기"}
         </Button>
       </div>
     </div>

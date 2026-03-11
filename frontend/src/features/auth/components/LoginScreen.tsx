@@ -1,48 +1,25 @@
-import React, { useState } from "react";
+"use client";
+
+import React from "react";
+import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 
-interface UserInfo {
-  name: string;
-  email: string;
-}
+const LoginScreen = () => {
+  const router = useRouter();
 
-interface LoginScreenProps {
-  onBack: () => void;
-  onLoginSuccess: (userInfo: UserInfo) => void;
-  navigateTo: (screen: string, params?: any) => void;
-}
-
-const LoginScreen = ({ onBack, onLoginSuccess, navigateTo }: LoginScreenProps) => {
-  const [isLoading, setIsLoading] = useState(false);
-
-  const handleSocialLogin = (provider: string) => {
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      onLoginSuccess({
-        name: `${provider} User`,
-        email: `user@${provider}.com`,
-      });
-    }, 1000);
+  const handleGoogleLogin = () => {
+    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+    window.location.href = `${base}/oauth2/authorization/google`;
   };
 
   return (
     <div className="flex flex-col h-full bg-white animate-fade-in relative pb-safe">
       <StatusBar theme="dark" />
 
-      {isLoading && (
-        <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-50 flex flex-col items-center justify-center">
-          <div className="w-10 h-10 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin mb-4" />
-          <p className="text-sm font-bold text-gray-600">
-            안전하게 로그인 중입니다...
-          </p>
-        </div>
-      )}
-
       <div className="px-6 pt-12 pb-6">
         <button
-          onClick={onBack}
+          onClick={() => router.back()}
           className="mb-6 p-2 -ml-2 rounded-full hover:bg-gray-100 w-fit"
         >
           <ChevronLeft />
@@ -58,34 +35,33 @@ const LoginScreen = ({ onBack, onLoginSuccess, navigateTo }: LoginScreenProps) =
       </div>
 
       <div className="flex-1 px-6 flex flex-col gap-3 justify-center pb-10">
+        {/* Kakao — 준비 중 */}
         <button
-          onClick={() => handleSocialLogin("Kakao")}
-          className="w-full relative flex items-center justify-center bg-[#FEE500] text-[#000000] rounded-2xl py-4 text-sm font-bold transition-transform active:scale-[0.98]"
+          disabled
+          className="w-full relative flex items-center justify-center bg-[#FEE500]/50 text-[#000000]/40 rounded-2xl py-4 text-sm font-bold cursor-not-allowed"
         >
           <div className="absolute left-5 w-6 h-6 flex items-center justify-center">
-            <svg
-              viewBox="0 0 32 32"
-              fill="currentColor"
-              className="w-full h-full"
-            >
+            <svg viewBox="0 0 32 32" fill="currentColor" className="w-full h-full opacity-40">
               <path d="M16 4.64c-6.96 0-12.64 4.48-12.64 10.08 0 3.52 2.32 6.64 5.76 8.48l-1.44 5.44c-.16.56.48 1.04.96.72l6.32-4.24c.32 0 .72.08 1.04.08 6.96 0 12.64-4.48 12.64-10.08S22.96 4.64 16 4.64z" />
             </svg>
           </div>
-          카카오로 로그인
+          카카오로 로그인 (준비 중)
         </button>
 
+        {/* Naver — 준비 중 */}
         <button
-          onClick={() => handleSocialLogin("Naver")}
-          className="w-full relative flex items-center justify-center bg-[#03C75A] text-white rounded-2xl py-4 text-sm font-bold transition-transform active:scale-[0.98]"
+          disabled
+          className="w-full relative flex items-center justify-center bg-[#03C75A]/30 text-white/50 rounded-2xl py-4 text-sm font-bold cursor-not-allowed"
         >
-          <div className="absolute left-5 w-6 h-6 flex items-center justify-center text-xl font-black leading-none pb-0.5">
+          <div className="absolute left-5 w-6 h-6 flex items-center justify-center text-xl font-black leading-none pb-0.5 opacity-40">
             N
           </div>
-          네이버로 로그인
+          네이버로 로그인 (준비 중)
         </button>
 
+        {/* Google — 실제 OAuth2 */}
         <button
-          onClick={() => handleSocialLogin("Google")}
+          onClick={handleGoogleLogin}
           className="w-full relative flex items-center justify-center bg-white border border-gray-200 text-gray-800 rounded-2xl py-4 text-sm font-bold transition-transform active:scale-[0.98] shadow-sm hover:bg-gray-50"
         >
           <div className="absolute left-5 w-6 h-6 flex items-center justify-center">
@@ -113,7 +89,7 @@ const LoginScreen = ({ onBack, onLoginSuccess, navigateTo }: LoginScreenProps) =
 
         <div className="mt-6 flex justify-center">
           <button
-            onClick={() => navigateTo("signup")}
+            onClick={() => router.push("/signup")}
             className="text-xs font-bold text-gray-400 hover:text-gray-600 underline underline-offset-4"
           >
             혹시 이메일로 가입하고 싶으신가요?

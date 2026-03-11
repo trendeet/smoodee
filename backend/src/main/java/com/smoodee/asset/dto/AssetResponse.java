@@ -16,6 +16,7 @@ public class AssetResponse {
   private final Integer width;
   private final Integer height;
   private final Integer durationSec;
+  private final String url;
 
   public static AssetResponse from(Asset asset) {
     return AssetResponse.builder()
@@ -27,6 +28,20 @@ public class AssetResponse {
         .width(asset.getWidth())
         .height(asset.getHeight())
         .durationSec(asset.getDurationSec())
+        .build();
+  }
+
+  public static AssetResponse from(Asset asset, String url) {
+    return AssetResponse.builder()
+        .id(asset.getId())
+        .projectId(asset.getProjectId())
+        .type(asset.getType().name())
+        .mime(asset.getMime())
+        .sizeBytes(asset.getSizeBytes())
+        .width(asset.getWidth())
+        .height(asset.getHeight())
+        .durationSec(asset.getDurationSec())
+        .url(url)
         .build();
   }
 }
