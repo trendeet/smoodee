@@ -11,5 +11,7 @@ public interface RenderJobRepository extends JpaRepository<RenderJob, Long> {
   Optional<RenderJob> findTopByProjectIdAndStatusOrderByCreatedAtDesc(
       Long projectId, RenderJobStatus status);
 
+  Optional<RenderJob> findTopByProjectIdOrderByCreatedAtDesc(Long projectId);
+
   List<RenderJob> findByStatus(RenderJobStatus status);
 }

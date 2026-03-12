@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
+import Toast from "@/components/ui/Toast";
 import ColorBlockSelector from "./ColorBlockSelector";
 import { colorworkService } from "@/lib/api/colorworkService";
 import { assetService } from "@/lib/api/assetService";
@@ -64,6 +65,8 @@ const ColorWorkFlow = () => {
   // ── render ──
   const [renderJob, setRenderJob] = useState<RenderJobResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showCopiedToast, setShowCopiedToast] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── guide (demo only) ──
@@ -125,7 +128,23 @@ const ColorWorkFlow = () => {
 
           // Determine step
           if (state.step === "FRAME" || state.step === "DONE") {
-            setStep(3);
+            // Check if a render job already exists for this project
+            renderService
+              .getLatestJobByProject(state.projectId)
+              .then((job) => {
+                setRenderJob(job);
+                if (job.status === "SUCCEEDED" || job.status === "RUNNING" || job.status === "QUEUED") {
+                  setStep(4);
+                  if (job.status === "RUNNING" || job.status === "QUEUED") {
+                    pollRenderJob(job.id);
+                  }
+                } else {
+                  setStep(3);
+                }
+              })
+              .catch(() => {
+                setStep(3);
+              });
           } else if (state.step === "GRID") {
             setStep(3);
           } else if (state.step === "PALETTE") {
@@ -272,6 +291,16 @@ const ColorWorkFlow = () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
   }, []);
+
+  // ── Pre-fetch share URL when render succeeds ─────────────────────────────
+  useEffect(() => {
+    if (renderJob?.status === "SUCCEEDED" && !shareUrl) {
+      renderService
+        .getShareUrl(renderJob.id)
+        .then((url) => setShareUrl(url))
+        .catch(() => {}); // 실패해도 버튼은 활성화 유지
+    }
+  }, [renderJob?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Overlay helpers ──────────────────────────────────────────────────────
 
@@ -948,6 +977,7 @@ const ColorWorkFlow = () => {
         className="flex flex-col h-full text-white animate-fade-in relative"
         style={{ backgroundColor: resultColor }}
       >
+        {showCopiedToast && <Toast message="링크가 복사되었습니다" />}
         <StatusBar theme="light" />
         <div className="px-4 py-3 flex justify-between items-center relative z-50">
           <button
@@ -1017,7 +1047,29 @@ const ColorWorkFlow = () => {
         </div>
 
         <div className="p-6 pb-safe safe-area-bottom space-y-3 bg-gradient-to-t from-black/20 to-transparent">
-          {isDone && renderJob?.resultUrl && (
+          {isFailed && (
+            <Button
+              size="lg"
+              variant="white"
+              icon={RefreshCcw}
+              loading={isSubmitting}
+              onClick={async () => {
+                if (!renderJob || isSubmitting) return;
+                setIsSubmitting(true);
+                try {
+                  const newJob = await renderService.retryRenderJob(renderJob.id);
+                  setRenderJob(newJob);
+                  setShareUrl(null);
+                  pollRenderJob(newJob.id);
+                } catch {
+                  setIsSubmitting(false);
+                }
+              }}
+            >
+              다시 시도
+            </Button>
+          )}
+          {isDone && (
             <Button
               size="lg"
               variant="white"
@@ -1030,7 +1082,32 @@ const ColorWorkFlow = () => {
               다운로드
             </Button>
           )}
-          <Button size="lg" variant="white" icon={Share2} disabled={!isDone}>
+          <Button
+            size="lg"
+            variant="white"
+            icon={Share2}
+            disabled={!isDone || !shareUrl}
+            onClick={() => {
+              if (!shareUrl) return;
+              navigator.clipboard
+                .writeText(shareUrl)
+                .then(() => {
+                  setShowCopiedToast(true);
+                  setTimeout(() => setShowCopiedToast(false), 1500);
+                })
+                .catch(() => {
+                  // clipboard API 미지원 시 fallback
+                  const el = document.createElement("textarea");
+                  el.value = shareUrl;
+                  document.body.appendChild(el);
+                  el.select();
+                  document.execCommand("copy");
+                  document.body.removeChild(el);
+                  setShowCopiedToast(true);
+                  setTimeout(() => setShowCopiedToast(false), 1500);
+                });
+            }}
+          >
             공유하기
           </Button>
           <button

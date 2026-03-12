@@ -19,6 +19,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Slf4j
 @Service
@@ -35,11 +37,13 @@ public class RenderService {
   @PostConstruct
   @Transactional
   public void recoverStaleJobs() {
-    List<RenderJob> staleJobs = renderJobRepository.findByStatus(RenderJobStatus.RUNNING);
+    List<RenderJob> staleJobs = new java.util.ArrayList<>();
+    staleJobs.addAll(renderJobRepository.findByStatus(RenderJobStatus.RUNNING));
+    staleJobs.addAll(renderJobRepository.findByStatus(RenderJobStatus.QUEUED));
     staleJobs.forEach(
         job -> {
+          log.warn("Recovered stale render job: jobId={}, prevStatus={}", job.getId(), job.getStatus());
           job.markFailed("서버 재기동으로 인한 렌더 중단");
-          log.warn("Recovered stale render job: jobId={}", job.getId());
         });
     renderJobRepository.saveAll(staleJobs);
   }
@@ -60,7 +64,13 @@ public class RenderService {
     job = renderJobRepository.save(job);
 
     project.transitionTo(ProjectStatus.DONE);
-    personalRenderWorker.execute(job);
+    final RenderJob savedJob = job;
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+      @Override
+      public void afterCommit() {
+        personalRenderWorker.execute(savedJob);
+      }
+    });
 
     return job;
   }
@@ -85,7 +95,13 @@ public class RenderService {
     RenderJob job =
         RenderJob.builder().projectId(group.getProjectId()).type(RenderJobType.GROUP_VIDEO).build();
     job = renderJobRepository.save(job);
-    groupRenderWorker.execute(job);
+    final RenderJob savedGroupJob = job;
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+      @Override
+      public void afterCommit() {
+        groupRenderWorker.execute(savedGroupJob);
+      }
+    });
     return job;
   }
 
@@ -102,11 +118,17 @@ public class RenderService {
         RenderJob.builder().projectId(failedJob.getProjectId()).type(failedJob.getType()).build();
     newJob = renderJobRepository.save(newJob);
 
-    if (failedJob.getType() == RenderJobType.PERSONAL_IMAGE) {
-      personalRenderWorker.execute(newJob);
-    } else if (failedJob.getType() == RenderJobType.GROUP_VIDEO) {
-      groupRenderWorker.execute(newJob);
-    }
+    final RenderJob savedNewJob = newJob;
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+      @Override
+      public void afterCommit() {
+        if (savedNewJob.getType() == RenderJobType.PERSONAL_IMAGE) {
+          personalRenderWorker.execute(savedNewJob);
+        } else if (savedNewJob.getType() == RenderJobType.GROUP_VIDEO) {
+          groupRenderWorker.execute(savedNewJob);
+        }
+      }
+    });
 
     return newJob;
   }
@@ -126,5 +148,23 @@ public class RenderService {
       throw new BusinessException(ErrorCode.RENDER_NOT_SUCCEEDED);
     }
     return storageService.presignGet(job.getOutputS3Key(), Duration.ofMinutes(10));
+  }
+
+  @Transactional(readOnly = true)
+  public RenderJob getLatestJobByProject(Long projectId, Long userId) {
+    projectService.getProjectWithOwnerCheck(projectId, userId);
+    return renderJobRepository
+        .findTopByProjectIdOrderByCreatedAtDesc(projectId)
+        .orElseThrow(() -> new NotFoundException(ErrorCode.RENDER_JOB_NOT_FOUND));
+  }
+
+  public String getShareUrl(Long jobId, Long userId) {
+    RenderJob job = getRenderJob(jobId);
+    projectService.getProjectWithOwnerCheck(job.getProjectId(), userId);
+
+    if (job.getStatus() != RenderJobStatus.SUCCEEDED) {
+      throw new BusinessException(ErrorCode.RENDER_NOT_SUCCEEDED);
+    }
+    return storageService.presignGet(job.getOutputS3Key(), Duration.ofDays(7));
   }
 }

@@ -64,4 +64,20 @@ public class RenderController {
     String url = renderService.getDownloadUrl(jobId, principal.getUserId());
     return ResponseEntity.ok(ApiResponse.of(Map.of("url", url)));
   }
+
+  @Operation(summary = "프로젝트의 최신 렌더 잡 조회")
+  @GetMapping("/jobs/by-project/{projectId}/latest")
+  public ResponseEntity<ApiResponse<RenderJobResponse>> getLatestJobByProject(
+      @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long projectId) {
+    RenderJob job = renderService.getLatestJobByProject(projectId, principal.getUserId());
+    return ResponseEntity.ok(ApiResponse.of(RenderJobResponse.from(job)));
+  }
+
+  @Operation(summary = "렌더 결과 공유 URL 발급 (SUCCEEDED만, TTL 7일)")
+  @GetMapping("/jobs/{jobId}/share-url")
+  public ResponseEntity<ApiResponse<Map<String, String>>> getShareUrl(
+      @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long jobId) {
+    String url = renderService.getShareUrl(jobId, principal.getUserId());
+    return ResponseEntity.ok(ApiResponse.of(Map.of("url", url)));
+  }
 }

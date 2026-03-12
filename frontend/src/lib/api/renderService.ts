@@ -36,4 +36,18 @@ export const renderService = {
     );
     return data.data.url;
   },
+
+  async getLatestJobByProject(projectId: number): Promise<RenderJobResponse> {
+    const { data } = await apiClient.get<ApiResponse<RenderJobResponse>>(
+      `/api/v1/render/jobs/by-project/${projectId}/latest`
+    );
+    return data.data;
+  },
+
+  async getShareUrl(id: number): Promise<string> {
+    const { data } = await apiClient.get<ApiResponse<{ url: string }>>(
+      `/api/v1/render/jobs/${id}/share-url`
+    );
+    return data.data.url;
+  },
 };

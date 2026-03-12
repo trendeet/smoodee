@@ -43,6 +43,7 @@ public class PersonalRenderWorker {
 
   @Async("renderExecutor")
   public void execute(RenderJob job) {
+    long t0 = System.currentTimeMillis();
     log.info("PersonalRender start: jobId={}", job.getId());
     job.markRunning();
     renderJobRepository.save(job);
@@ -67,16 +68,24 @@ public class PersonalRenderWorker {
             "프레임 업로드가 완료되지 않았습니다. 필요: " + required + ", 현재: " + frames.size());
       }
 
+      long t1 = System.currentTimeMillis();
       List<BufferedImage> images = loadImages(frames);
+      long t2 = System.currentTimeMillis();
+      log.info("PersonalRender [S3 download]: jobId={}, {}ms", job.getId(), t2 - t1);
+
       BufferedImage output = compose(images, gridType, config.getSelectedPaletteJson());
+      long t3 = System.currentTimeMillis();
+      log.info("PersonalRender [compose]: jobId={}, {}ms", job.getId(), t3 - t2);
 
       String s3Key = String.format("renders/%d/%d.png", job.getProjectId(), job.getId());
       uploadOutput(output, s3Key);
+      long t4 = System.currentTimeMillis();
+      log.info("PersonalRender [S3 upload]: jobId={}, {}ms", job.getId(), t4 - t3);
 
       job.markSucceeded(s3Key);
-      log.info("PersonalRender succeeded: jobId={}, key={}", job.getId(), s3Key);
+      log.info("PersonalRender succeeded: jobId={}, total={}ms", job.getId(), t4 - t0);
     } catch (Exception e) {
-      log.error("PersonalRender failed: jobId={}", job.getId(), e);
+      log.error("PersonalRender failed: jobId={}, elapsed={}ms", job.getId(), System.currentTimeMillis() - t0, e);
       job.markFailed(e.getMessage());
     } finally {
       renderJobRepository.save(job);
