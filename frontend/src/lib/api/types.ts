@@ -42,6 +42,7 @@ export interface ProjectResponse {
   createdAt: string;
   updatedAt: string;
   groupId?: number;
+  memberCount?: number;
   thumbnailUrl?: string;
   filledFrames?: number;
   totalFrames?: number;
@@ -123,25 +124,21 @@ export interface GroupMemberResponse {
 // Slot
 export interface SlotResponse {
   id: number;
-  groupId: number;
+  groupId?: number;
   orderIndex: number;
-  scheduledTime: string; // "HH:mm"
-  label?: string;
-  userId?: number;
+  timeLabel: string;
+  dueAt?: string;
+  status?: string; // "EMPTY" | "FILLED"
   userName?: string;
-  assetId?: number;
   assetUrl?: string;
-  status: string; // "EMPTY" | "FILLED"
 }
 
 export interface CreateSlotRequest {
-  scheduledTime: string;
-  label?: string;
+  timeLabel: string;
 }
 
 export interface UpdateSlotRequest {
-  scheduledTime?: string;
-  label?: string;
+  timeLabel?: string;
 }
 
 export interface GroupProgressResponse {

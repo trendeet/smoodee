@@ -40,6 +40,7 @@ public class GroupService {
     Project project =
         Project.builder()
             .userId(userId)
+            .title(name)
             .type(ProjectType.GROUP)
             .templateType(TemplateType.DAYSHARE)
             .status(ProjectStatus.CREATED)

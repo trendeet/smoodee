@@ -10,6 +10,7 @@ interface SelectedGroup {
   memberCount?: number;
   currentMemberCount?: number;
   status?: string;
+  source?: "home" | "inprogress";
 }
 
 interface AppContextType {

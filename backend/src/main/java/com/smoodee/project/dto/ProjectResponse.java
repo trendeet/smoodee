@@ -21,6 +21,8 @@ public class ProjectResponse {
   private final Integer totalFrames;
   private final String thumbnailUrl;
   private final String paletteColor;
+  private final Long groupId;
+  private final Integer memberCount;
 
   public static ProjectResponse from(Project project) {
     return ProjectResponse.builder()
@@ -32,6 +34,21 @@ public class ProjectResponse {
         .createdAt(project.getCreatedAt())
         .updatedAt(project.getUpdatedAt())
         .expiresAt(project.getExpiresAt())
+        .build();
+  }
+
+  public static ProjectResponse from(Project project, Long groupId, String groupName, int memberCount) {
+    return ProjectResponse.builder()
+        .id(project.getId())
+        .title(groupName)
+        .type(project.getType().name())
+        .templateType(project.getTemplateType().name())
+        .status(project.getStatus().name())
+        .createdAt(project.getCreatedAt())
+        .updatedAt(project.getUpdatedAt())
+        .expiresAt(project.getExpiresAt())
+        .groupId(groupId)
+        .memberCount(memberCount)
         .build();
   }
 

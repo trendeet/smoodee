@@ -2,8 +2,8 @@
   "mcpServers": {
     "playwright": {
       "type": "stdio",
-      "command": "cmd",
-      "args": ["/c", "npx", "@playwright/mcp@latest"]
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
     },
     "openapi": {
       "disabled": false,
@@ -14,17 +14,15 @@
         "tool",
         "run",
         "--from",
-        "awslabs.openapi-mcp-server@latest",
-        "awslabs.openapi-mcp-server.exe"
-      ],
-      "env": {
-        "API_NAME": "local",
-        "API_BASE_URL": "http://localhost:8080",
-        "API_SPEC_URL": "http://localhost:8080/v3/api-docs",
-        "LOG_LEVEL": "ERROR",
-        "ENABLE_PROMETHEUS": "false",
-        "ENABLE_OPERATION_PROMPTS": "true"
-      }
+        "awslabs.openapi-mcp-server==0.2.14",
+        "--with",
+        "fastmcp==2.14.5",
+        "awslabs.openapi-mcp-server",
+        "--api-name", "local",
+        "--api-url", "http://localhost:8080",
+        "--spec-url", "http://localhost:8080/v3/api-docs",
+        "--log-level", "ERROR"
+      ]
     }
   }
 }

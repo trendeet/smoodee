@@ -30,11 +30,9 @@ const GroupDayFlow = () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       // Navigate to group screen
       if (group.projectId) {
-        setSelectedGroup({ id: group.id, projectId: group.projectId, name: group.name });
-        router.push("/inprogress");
-      } else {
-        router.push("/inprogress");
+        setSelectedGroup({ id: group.id, projectId: group.projectId, name: group.name, source: "home" });
       }
+      router.push("/inprogress");
     } finally {
       setIsCreating(false);
     }

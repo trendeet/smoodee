@@ -6,6 +6,10 @@ spring:
   jackson:
     default-property-inclusion: non_null
     time-zone: Asia/Seoul
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
 
 server:
   port: 8080

@@ -2,6 +2,8 @@ package com.smoodee.project.controller;
 
 import com.smoodee.global.dto.ApiResponse;
 import com.smoodee.global.security.CustomUserDetails;
+import com.smoodee.group.repository.GroupMemberRepository;
+import com.smoodee.group.repository.GroupRepository;
 import com.smoodee.personal.service.ColorworkService;
 import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.dto.ProjectResponse;
@@ -31,6 +33,8 @@ public class ProjectController {
 
   private final ProjectService projectService;
   private final ColorworkService colorworkService;
+  private final GroupRepository groupRepository;
+  private final GroupMemberRepository groupMemberRepository;
 
   @Operation(
       summary = "프로젝트 목록 조회",
@@ -56,6 +60,14 @@ public class ProjectController {
                   String thumbnailUrl = colorworkService.getThumbnailUrl(project.getId(), principal.getUserId());
                   String paletteColor = colorworkService.getPaletteColor(project.getId());
                   return ProjectResponse.from(project, progress[0], progress[1], thumbnailUrl, paletteColor);
+                }
+                if (project.getTemplateType() == TemplateType.DAYSHARE) {
+                  return groupRepository.findByProjectId(project.getId())
+                      .map(group -> {
+                        int memberCount = groupMemberRepository.countByGroupId(group.getId());
+                        return ProjectResponse.from(project, group.getId(), group.getName(), memberCount);
+                      })
+                      .orElseGet(() -> ProjectResponse.from(project));
                 }
                 return ProjectResponse.from(project);
               })

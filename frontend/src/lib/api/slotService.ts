@@ -44,7 +44,7 @@ export const slotService = {
   },
 
   async bindUpload(groupId: number, slotId: number, assetId: number): Promise<void> {
-    await apiClient.put(`/api/v1/groups/${groupId}/slots/${slotId}/asset`, { assetId });
+    await apiClient.put(`/api/v1/groups/${groupId}/slots/${slotId}/upload`, { assetId });
   },
 
   async getProgress(groupId: number): Promise<GroupProgressResponse> {

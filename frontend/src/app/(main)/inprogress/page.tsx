@@ -14,6 +14,7 @@ import {
   Trash2,
   CheckCircle2,
   Circle,
+  Film,
 } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Toast from "@/components/ui/Toast";
@@ -23,10 +24,11 @@ import { useProjects } from "@/hooks/useProjects";
 import { useTemplates } from "@/hooks/useTemplates";
 import { useApp } from "@/lib/context/AppContext";
 import { useUI } from "@/lib/context/UIContext";
+import { useAuth } from "@/lib/context/AuthContext";
 import { projectService } from "@/lib/api/projectService";
 
 const TEMPLATE_NAMES: Record<string, string> = {
-  COLORWORK: "ColorWork",
+  COLORWORK: "컬러워크",
   DAYSHARE: "하루공유",
 };
 
@@ -50,6 +52,7 @@ const InProgressPage = () => {
   const queryClient = useQueryClient();
   const { selectedGroup, setSelectedGroup } = useApp();
   const { openMenu } = useUI();
+  const { userProfile } = useAuth();
 
   const [subTab, setSubTab] = useState("personal");
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -81,7 +84,7 @@ const InProgressPage = () => {
 
   const handleGroupCardClick = (project: { id: number; groupId?: number; title: string }) => {
     if (!project.groupId) return;
-    setSelectedGroup({ id: project.groupId, projectId: project.id, name: project.title });
+    setSelectedGroup({ id: project.groupId, projectId: project.id, name: project.title, source: "inprogress" });
   };
 
   // ── 선택 모드 ──────────────────────────────────────────────────────────
@@ -259,10 +262,12 @@ const InProgressPage = () => {
                           <div className="flex items-center gap-2">
                             <h3 className="font-bold text-lg text-gray-900 leading-tight">{TEMPLATE_NAMES[project.templateType] ?? project.templateType}</h3>
                             {project.paletteColor && (
-                              <div
-                                className="w-4 h-4 rounded-md shrink-0 shadow-sm"
-                                style={{ backgroundColor: project.paletteColor }}
-                              />
+                              <div className="bg-white border border-gray-200 shadow-sm p-1 shrink-0">
+                                <div
+                                  className="w-6 h-6"
+                                  style={{ backgroundColor: project.paletteColor }}
+                                />
+                              </div>
                             )}
                           </div>
                         </div>
@@ -328,7 +333,7 @@ const InProgressPage = () => {
                     isSelected ? "border-red-400 bg-red-50/30 shadow-red-100" : "border-gray-100 hover:shadow-md"
                   }`}
                 >
-                  <div className="flex justify-between items-start mb-3">
+                  <div className="flex justify-between items-center mb-3">
                     <div className="flex items-center gap-3">
                       {isSelectMode && (
                         <div className="shrink-0">
@@ -337,14 +342,30 @@ const InProgressPage = () => {
                             : <Circle size={22} className="text-gray-300" />}
                         </div>
                       )}
-                      <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-2xl shrink-0">
-                        🌅
+                      <div className="flex items-center gap-3">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-400 to-cyan-300 overflow-hidden flex flex-col items-center justify-center shrink-0">
+                          <div className="w-6 h-6 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-1">
+                            <Film size={12} className="text-white" />
+                          </div>
+                          <span className="font-black text-[8px] text-white leading-tight tracking-tight text-center">DAY<br />SHARE</span>
+                        </div>
+                        <span className="font-bold text-base text-gray-900 leading-tight">{project.title ?? "하루공유 그룹"}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="flex -space-x-2">
-                        {[...Array(3)].map((_, i) => (
-                          <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-gray-200" />
+                        {[...Array(project.memberCount ?? 3)].map((_, i) => (
+                          i === 0 && userProfile?.avatar ? (
+                            userProfile.avatar.startsWith("http") || userProfile.avatar.startsWith("data:") ? (
+                              <img key={i} src={userProfile.avatar} className="w-8 h-8 rounded-full border-2 border-white object-cover" />
+                            ) : (
+                              <div key={i} className={`w-8 h-8 rounded-full border-2 border-white ${userProfile.avatar} flex items-center justify-center`}>
+                                <User size={14} className="text-white" />
+                              </div>
+                            )
+                          ) : (
+                            <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-gray-200" />
+                          )
                         ))}
                       </div>
                       {!isSelectMode && (
@@ -357,8 +378,6 @@ const InProgressPage = () => {
                       )}
                     </div>
                   </div>
-                  <h3 className="font-bold text-lg text-gray-900 mb-1">{project.title}</h3>
-                  <p className="text-xs text-gray-500 mb-4">그룹 프로젝트</p>
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-bold text-gray-400">
                       <span>진행률</span>

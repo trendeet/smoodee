@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
   Share2,
@@ -13,6 +14,8 @@ import {
   Check,
   Clock,
   FolderClock,
+  Play,
+  X,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import StatusBar from "@/components/ui/StatusBar";
@@ -24,12 +27,15 @@ import { slotService } from "@/lib/api/slotService";
 import { chatService } from "@/lib/api/chatService";
 import { assetService } from "@/lib/api/assetService";
 import { useApp } from "@/lib/context/AppContext";
+import { useAuth } from "@/lib/context/AuthContext";
 import { timeToMinutes } from "@/lib/utils/time";
 import { TIME_OPTIONS } from "@/lib/mock-data/messages";
 
 const GroupScreen = () => {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { selectedGroup, setSelectedGroup } = useApp();
+  const { userProfile } = useAuth();
 
   const groupId = selectedGroup?.id ?? null;
 
@@ -69,13 +75,13 @@ const GroupScreen = () => {
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const createSlot = useMutation({
-    mutationFn: (scheduledTime: string) =>
-      slotService.createSlot(groupId!, { scheduledTime }),
+    mutationFn: (timeLabel: string) =>
+      slotService.createSlot(groupId!, { timeLabel }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["group", groupId, "slots"] }),
   });
 
   const updateSlot = useMutation({
-    mutationFn: ({ slotId, body }: { slotId: number; body: { scheduledTime?: string; label?: string } }) =>
+    mutationFn: ({ slotId, body }: { slotId: number; body: { timeLabel?: string } }) =>
       slotService.updateSlot(groupId!, slotId, body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["group", groupId, "slots"] }),
   });
@@ -93,6 +99,8 @@ const GroupScreen = () => {
   const [chatInput, setChatInput] = useState("");
   const [showMockResult, setShowMockResult] = useState(false);
   const [uploadingSlotId, setUploadingSlotId] = useState<number | null>(null);
+  const [slotAssets, setSlotAssets] = useState<Record<number, { url: string; thumbnailUrl: string; isVideo: boolean }>>({});
+  const [playingAsset, setPlayingAsset] = useState<{ url: string; isVideo: boolean } | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -125,7 +133,7 @@ const GroupScreen = () => {
     const lastSlot = slots[slots.length - 1];
     let newTime = "09:00";
     if (lastSlot) {
-      const lastMins = timeToMinutes(lastSlot.scheduledTime);
+      const lastMins = timeToMinutes(lastSlot.timeLabel);
       let nextMins = lastMins + 15;
       if (nextMins > 24 * 60 - 1) nextMins = 24 * 60 - 1;
       const h = Math.floor(nextMins / 60);
@@ -139,23 +147,41 @@ const GroupScreen = () => {
     const newMins = timeToMinutes(newTime);
     let isValid = true;
     if (currentIndex > 0) {
-      if (timeToMinutes(slots[currentIndex - 1].scheduledTime) >= newMins) isValid = false;
+      if (timeToMinutes(slots[currentIndex - 1].timeLabel) >= newMins) isValid = false;
     }
     if (currentIndex < slots.length - 1) {
-      if (timeToMinutes(slots[currentIndex + 1].scheduledTime) <= newMins) isValid = false;
+      if (timeToMinutes(slots[currentIndex + 1].timeLabel) <= newMins) isValid = false;
     }
     if (!isValid) {
       setShowTimeOrderToast(true);
       setTimeout(() => setShowTimeOrderToast(false), 2000);
       return;
     }
-    updateSlot.mutate({ slotId, body: { scheduledTime: newTime } });
+    updateSlot.mutate({ slotId, body: { timeLabel: newTime } });
   };
 
   const handleSlotClick = (slotId: number) => {
     pendingSlotId.current = slotId;
     fileInputRef.current?.click();
   };
+
+  const captureVideoThumbnail = (videoUrl: string): Promise<string> =>
+    new Promise((resolve) => {
+      const video = document.createElement("video");
+      video.src = videoUrl;
+      video.muted = true;
+      video.playsInline = true;
+      video.currentTime = 0.5;
+      video.addEventListener("seeked", () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 320;
+        canvas.height = video.videoHeight || 240;
+        canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.8));
+        video.remove();
+      }, { once: true });
+      video.load();
+    });
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -164,9 +190,18 @@ const GroupScreen = () => {
     e.target.value = "";
     pendingSlotId.current = null;
     setUploadingSlotId(slotId);
+    const isVideo = file.type.startsWith("video/");
+    const localUrl = URL.createObjectURL(file);
     try {
-      const asset = await assetService.uploadAsset(selectedGroup.projectId ?? groupId, file);
+      const [asset, thumbnailUrl] = await Promise.all([
+        assetService.uploadAsset(selectedGroup.projectId ?? groupId, file),
+        isVideo ? captureVideoThumbnail(localUrl) : Promise.resolve(localUrl),
+      ]);
       await slotService.bindUpload(groupId, slotId, asset.id);
+      setSlotAssets((prev) => ({
+        ...prev,
+        [slotId]: { url: asset.url ?? localUrl, thumbnailUrl, isVideo },
+      }));
       queryClient.invalidateQueries({ queryKey: ["group", groupId, "slots"] });
       queryClient.invalidateQueries({ queryKey: ["group", groupId, "progress"] });
     } finally {
@@ -201,11 +236,46 @@ const GroupScreen = () => {
         slots={[]}
       />
 
+      {/* 영상/이미지 재생 모달 */}
+      {playingAsset && (
+        <div
+          className="absolute inset-0 z-[200] bg-black flex items-center justify-center"
+          onClick={() => setPlayingAsset(null)}
+        >
+          <button
+            className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white"
+            onClick={() => setPlayingAsset(null)}
+          >
+            <X size={20} />
+          </button>
+          {playingAsset.isVideo ? (
+            <video
+              src={playingAsset.url}
+              className="w-full max-h-full"
+              autoPlay
+              muted
+              playsInline
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <img
+              src={playingAsset.url}
+              alt="preview"
+              className="w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="px-4 py-4 bg-white border-b border-gray-100 sticky top-0 z-20">
         <div className="flex items-center gap-2 mb-4">
           <button
-            onClick={() => setSelectedGroup(null)}
+            onClick={() => {
+              setSelectedGroup(null);
+              if (selectedGroup?.source === "home") router.push("/");
+            }}
             className="p-1 -ml-1 rounded-full hover:bg-gray-100 text-gray-600"
           >
             <ChevronLeft size={24} />
@@ -232,20 +302,25 @@ const GroupScreen = () => {
           <h3 className="text-xs font-bold text-gray-500 mb-2 px-1">함께하는 멤버</h3>
           <div className="flex gap-3 overflow-x-auto no-scrollbar px-1">
             {members.length > 0
-              ? members.map((member) => (
-                  <div key={member.userId} className="flex flex-col items-center gap-1 min-w-[50px]">
-                    {member.avatarUrl ? (
-                      <img src={member.avatarUrl} alt={member.name} className="w-10 h-10 rounded-full object-cover ring-2 ring-white shadow-sm" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white text-xs font-bold ring-2 ring-white shadow-sm">
-                        {member.name?.[0] ?? "?"}
-                      </div>
-                    )}
-                    <span className="text-[10px] font-medium text-gray-600 truncate max-w-[50px]">
-                      {member.name}
-                    </span>
-                  </div>
-                ))
+              ? members.map((member) => {
+                  const isMe = member.userId === userProfile?.id;
+                  const avatarSrc = isMe ? userProfile?.avatar : member.avatarUrl;
+                  const isImage = avatarSrc?.startsWith("http") || avatarSrc?.startsWith("data:");
+                  return (
+                    <div key={member.userId} className="flex flex-col items-center gap-1 min-w-[50px]">
+                      {isImage ? (
+                        <img src={avatarSrc} alt={member.name} className="w-10 h-10 rounded-full object-cover ring-2 ring-white shadow-sm" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white text-xs font-bold ring-2 ring-white shadow-sm">
+                          {member.name?.[0] ?? "?"}
+                        </div>
+                      )}
+                      <span className="text-[10px] font-medium text-gray-600 truncate max-w-[50px]">
+                        {isMe ? "나" : member.name}
+                      </span>
+                    </div>
+                  );
+                })
               : [...Array(memberCount)].map((_, i) => (
                   <div key={i} className="flex flex-col items-center gap-1 min-w-[50px]">
                     <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-xs font-bold">
@@ -347,69 +422,78 @@ const GroupScreen = () => {
               ? Array(4).fill(0).map((_, i) => (
                   <div key={i} className="h-36 bg-gray-100 rounded-2xl animate-pulse" />
                 ))
-              : slots.map((slot, idx) => (
-                  <div
-                    key={slot.id}
-                    className="border border-gray-200 rounded-2xl p-4 flex flex-col justify-between h-36 relative overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex justify-between items-start z-10">
-                      <select
-                        value={slot.scheduledTime}
-                        onChange={(e) => handleTimeChange(slot.id, e.target.value, idx)}
-                        className="text-[10px] font-bold bg-gray-100 px-2 py-1 rounded-md text-gray-500 font-mono tracking-tight text-center focus:ring-2 focus:ring-blue-500 outline-none transition-all border border-transparent focus:bg-white cursor-pointer"
-                      >
-                        {TIME_OPTIONS.map((time) => (
-                          <option key={time} value={time}>{time}</option>
-                        ))}
-                      </select>
-                      {slot.status === "FILLED" && (
-                        <div className="bg-green-100 p-1 rounded-full">
-                          <Check size={10} className="text-green-600" strokeWidth={3} />
-                        </div>
-                      )}
-                    </div>
-
-                    {slot.status === "FILLED" && (
-                      <div className="absolute inset-0 bg-blue-500 opacity-10" />
-                    )}
-
-                    {slot.status !== "FILLED" && (
-                      <div className="flex flex-col items-center justify-center flex-1 mt-2 z-10">
-                        <button
-                          onClick={() => handleSlotClick(slot.id)}
-                          disabled={uploadingSlotId !== null}
-                          className="w-10 h-10 rounded-full bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 mb-2 hover:bg-black hover:text-white hover:border-black transition-all group disabled:opacity-50"
+              : slots.map((slot, idx) => {
+                  const uploaded = slotAssets[slot.id];
+                  const isFilled = !!uploaded;
+                  return (
+                    <div
+                      key={slot.id}
+                      className="border border-gray-200 rounded-2xl flex flex-col justify-between h-36 relative overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
+                    >
+                      {/* 썸네일 */}
+                      {uploaded && (
+                        <div
+                          className="absolute inset-0 cursor-pointer"
+                          onClick={() => setPlayingAsset(uploaded)}
                         >
-                          {uploadingSlotId === slot.id ? (
-                            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <Camera size={18} className="group-hover:scale-110 transition-transform" />
+                          <img
+                            src={uploaded.thumbnailUrl}
+                            alt="slot"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-black/20" />
+                          {uploaded.isVideo && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-10 h-10 rounded-full bg-white/80 flex items-center justify-center shadow-lg">
+                                <Play size={18} className="text-gray-900 ml-0.5" fill="currentColor" />
+                              </div>
+                            </div>
                           )}
-                        </button>
-                      </div>
-                    )}
-
-                    {slot.assetUrl && (
-                      <div className="absolute inset-0">
-                        <img src={slot.assetUrl} alt="slot" className="w-full h-full object-cover opacity-60 rounded-2xl" />
-                      </div>
-                    )}
-
-                    <div className="z-10 mt-auto flex flex-col w-full">
-                      <span className={`font-bold text-base leading-tight ${slot.status === "FILLED" ? "text-gray-900" : "text-gray-600 text-center"}`}>
-                        {slot.label || slot.scheduledTime}
-                      </span>
-                      {slot.userName && (
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <div className="w-5 h-5 rounded-full bg-gray-900 text-white flex items-center justify-center text-[10px] font-bold">
-                            {slot.userName?.[0] ?? "?"}
-                          </div>
-                          <p className="text-xs text-gray-500 font-medium">{slot.userName}</p>
                         </div>
                       )}
+
+                      <div className="flex justify-between items-start z-10 p-3">
+                        <select
+                          value={slot.timeLabel}
+                          onChange={(e) => handleTimeChange(slot.id, e.target.value, idx)}
+                          className="text-[10px] font-bold bg-gray-100 px-2 py-1 rounded-md text-gray-500 font-mono tracking-tight text-center focus:ring-2 focus:ring-blue-500 outline-none transition-all border border-transparent focus:bg-white cursor-pointer"
+                          style={{ backdropFilter: "blur(4px)" }}
+                        >
+                          {TIME_OPTIONS.map((time) => (
+                            <option key={time} value={time}>{time}</option>
+                          ))}
+                        </select>
+                        {isFilled && (
+                          <div className="bg-green-100 p-1 rounded-full">
+                            <Check size={10} className="text-green-600" strokeWidth={3} />
+                          </div>
+                        )}
+                      </div>
+
+                      {!isFilled && (
+                        <div className="flex flex-col items-center justify-center flex-1 z-10">
+                          <button
+                            onClick={() => handleSlotClick(slot.id)}
+                            disabled={uploadingSlotId !== null}
+                            className="w-10 h-10 rounded-full bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 mb-2 hover:bg-black hover:text-white hover:border-black transition-all group disabled:opacity-50"
+                          >
+                            {uploadingSlotId === slot.id ? (
+                              <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Camera size={18} className="group-hover:scale-110 transition-transform" />
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="z-10 p-3 pt-0">
+                        <span className={`font-bold text-sm leading-tight ${isFilled ? "text-white drop-shadow" : "text-gray-600"}`}>
+                          {slot.timeLabel}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             <button
               onClick={handleAddSlot}
               disabled={createSlot.isPending}

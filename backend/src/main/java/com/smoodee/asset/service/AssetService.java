@@ -7,7 +7,10 @@ import com.smoodee.global.exception.BusinessException;
 import com.smoodee.global.exception.ErrorCode;
 import com.smoodee.global.exception.ForbiddenException;
 import com.smoodee.global.exception.NotFoundException;
+import com.smoodee.group.repository.GroupMemberRepository;
+import com.smoodee.group.repository.GroupRepository;
 import com.smoodee.project.domain.Project;
+import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.service.ProjectService;
 import com.smoodee.storage.service.StorageService;
 import java.awt.image.BufferedImage;
@@ -32,11 +35,22 @@ public class AssetService {
   private final AssetRepository assetRepository;
   private final ProjectService projectService;
   private final StorageService storageService;
+  private final GroupRepository groupRepository;
+  private final GroupMemberRepository groupMemberRepository;
 
   @Transactional
   public Asset upload(Long projectId, Long userId, MultipartFile file) {
     Project project = projectService.getProject(projectId);
-    projectService.requireOwner(project, userId);
+    if (project.getType() == ProjectType.GROUP) {
+      // 그룹 프로젝트: 그룹 멤버면 업로드 허용
+      groupRepository.findByProjectId(projectId).ifPresent(group -> {
+        if (!groupMemberRepository.existsByGroupIdAndUserId(group.getId(), userId)) {
+          throw new ForbiddenException(ErrorCode.GROUP_ACCESS_DENIED);
+        }
+      });
+    } else {
+      projectService.requireOwner(project, userId);
+    }
 
     String mime = file.getContentType();
     AssetType assetType = determineAssetType(mime);
