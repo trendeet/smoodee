@@ -47,6 +47,14 @@ export const slotService = {
     await apiClient.put(`/api/v1/groups/${groupId}/slots/${slotId}/upload`, { assetId });
   },
 
+  async updateCaption(groupId: number, slotId: number, caption: string): Promise<void> {
+    await apiClient.put(`/api/v1/groups/${groupId}/slots/${slotId}/caption`, { caption });
+  },
+
+  async deleteUpload(groupId: number, slotId: number): Promise<void> {
+    await apiClient.delete(`/api/v1/groups/${groupId}/slots/${slotId}/upload`);
+  },
+
   async getProgress(groupId: number): Promise<GroupProgressResponse> {
     const { data } = await apiClient.get<ApiResponse<GroupProgressResponse>>(
       `/api/v1/groups/${groupId}/progress`

@@ -45,6 +45,9 @@ public class SlotUpload {
   @Column(nullable = false)
   private LocalDateTime updatedAt;
 
+  @Column(length = 100)
+  private String caption;
+
   @Builder
   public SlotUpload(Long slotId, Long userId, Long assetId) {
     this.slotId = slotId;
@@ -57,6 +60,11 @@ public class SlotUpload {
   public void updateAsset(Long assetId) {
     this.assetId = assetId;
     this.status = SlotUploadStatus.UPLOADED;
+    this.updatedAt = LocalDateTime.now();
+  }
+
+  public void updateCaption(String caption) {
+    this.caption = caption;
     this.updatedAt = LocalDateTime.now();
   }
 }

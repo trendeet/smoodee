@@ -33,9 +33,10 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class GroupRenderWorker {
 
+  // Portrait layout: members stacked vertically → 720×1280 total
   private static final int OUTPUT_WIDTH = 720;
   private static final int OUTPUT_HEIGHT = 1280;
-  private static final int SEGMENT_DURATION = 3;
+  private static final int SEGMENT_DURATION = 2;
   private static final String PLACEHOLDER_COLOR = "0x1a1a1a";
 
   private final RenderJobRepository renderJobRepository;
@@ -45,6 +46,8 @@ public class GroupRenderWorker {
   private final SlotUploadRepository slotUploadRepository;
   private final AssetRepository assetRepository;
   private final StorageService storageService;
+
+  private record CellInfo(boolean isImage, String caption) {}
 
   @Async("renderExecutor")
   public void execute(RenderJob job) {
@@ -104,60 +107,131 @@ public class GroupRenderWorker {
     }
   }
 
-  private void checkFfmpeg() throws Exception {
-    Process process = new ProcessBuilder("ffmpeg", "-version").redirectErrorStream(true).start();
-    int exitCode = process.waitFor();
-    if (exitCode != 0) {
-      throw new IllegalStateException("ffmpeg를 찾을 수 없습니다. 서버에 ffmpeg를 설치해주세요.");
-    }
-  }
-
+  /**
+   * 슬롯 1개 → MP4 세그먼트 생성
+   * 레이아웃: 멤버 수만큼 열(column)을 가로로 배치 (hstack)
+   * 각 열에는 해당 멤버의 영상 + 캡션 텍스트 오버레이
+   * 상단 중앙에 시간 레이블 표시
+   */
   private Path buildSegment(
       Long jobId, Slot slot, List<Long> memberIds, Map<Long, SlotUpload> uploads, Path tempDir)
       throws Exception {
+
     int rows = memberIds.size();
+    int cellWidth = OUTPUT_WIDTH;
     int cellHeight = OUTPUT_HEIGHT / rows;
 
     List<String> inputArgs = new ArrayList<>();
     List<String> filterParts = new ArrayList<>();
     List<String> stackInputs = new ArrayList<>();
+    List<CellInfo> cellInfos = new ArrayList<>();
 
     for (int i = 0; i < memberIds.size(); i++) {
       Long memberId = memberIds.get(i);
       SlotUpload upload = uploads.get(memberId);
       boolean isMissing = upload == null || upload.getStatus() == SlotUploadStatus.MISSING;
+      String caption =
+          (!isMissing
+                  && upload.getCaption() != null
+                  && !upload.getCaption().isBlank())
+              ? upload.getCaption()
+              : null;
 
       if (isMissing) {
-        // placeholder: color input
+        // placeholder: dark background, duration fixed at SEGMENT_DURATION
         inputArgs.add("-f");
         inputArgs.add("lavfi");
         inputArgs.add("-i");
         inputArgs.add(
             String.format(
-                "color=%s:size=%dx%d:rate=30,drawtext=text='MISSING':fontsize=40:fontcolor=white:x=(w-text_w)/2:y=(h-text_h)/2",
-                PLACEHOLDER_COLOR, OUTPUT_WIDTH, cellHeight));
+                "color=%s:size=%dx%d:rate=30:duration=%d",
+                PLACEHOLDER_COLOR, cellWidth, cellHeight, SEGMENT_DURATION));
+        cellInfos.add(new CellInfo(false, null));
       } else {
-        Path videoFile = downloadAsset(upload.getAssetId(), tempDir, jobId, slot.getId(), i);
-        inputArgs.add("-i");
-        inputArgs.add(videoFile.toAbsolutePath().toString());
+        Asset asset =
+            assetRepository
+                .findById(upload.getAssetId())
+                .orElseThrow(
+                    () -> new IllegalStateException("Asset not found: " + upload.getAssetId()));
+        boolean isImage = asset.getMime() != null && asset.getMime().startsWith("image/");
+        Path file =
+            downloadFile(
+                asset.getS3Key(),
+                mimeToExt(asset.getMime()),
+                tempDir,
+                jobId,
+                slot.getId(),
+                i);
+        if (isImage) {
+          inputArgs.add("-loop");
+          inputArgs.add("1");
+          inputArgs.add("-framerate");
+          inputArgs.add("30");
+          inputArgs.add("-t");
+          inputArgs.add(String.valueOf(SEGMENT_DURATION));
+          inputArgs.add("-i");
+          inputArgs.add(file.toAbsolutePath().toString());
+        } else {
+          // pre-trim: 합성 전 3초로 자른 임시 파일 생성
+          Path trimmed = tempDir.resolve("trim_" + slot.getId() + "_" + i + ".mp4");
+          pretrimVideo(file, trimmed);
+          inputArgs.add("-i");
+          inputArgs.add(trimmed.toAbsolutePath().toString());
+        }
+        cellInfos.add(new CellInfo(isImage, caption));
+      }
+    }
+
+    // Build per-cell filters
+    for (int i = 0; i < memberIds.size(); i++) {
+      CellInfo info = cellInfos.get(i);
+      StringBuilder f = new StringBuilder();
+      f.append(String.format("[%d:v]", i));
+
+      f.append("fps=30,");
+
+      f.append("setpts=PTS-STARTPTS,");
+      f.append(
+          String.format(
+              "scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,setsar=1",
+              cellWidth, cellHeight, cellWidth, cellHeight));
+
+      // caption text centered on cell
+      if (info.caption() != null) {
+        f.append(
+            String.format(
+                ",drawtext=text='%s':fontsize=22:fontcolor=white%s"
+                    + ":x=(w-text_w)/2:y=(h-text_h)/2"
+                    + ":shadowcolor=black@0.8:shadowx=2:shadowy=2"
+                    + ":box=1:boxcolor=black@0.35:boxborderw=8",
+                escapeFfmpegText(info.caption()), fontfileArg()));
+      } else if (cellInfos.get(i).isImage() == false && uploads.get(memberIds.get(i)) == null) {
+        // missing placeholder label
+        f.append(String.format(",drawtext=text='MISSING':fontsize=30:fontcolor=white@0.5%s"
+            + ":x=(w-text_w)/2:y=(h-text_h)/2", fontfileArg()));
       }
 
-      filterParts.add(
-          String.format(
-              "[%d:v]trim=duration=%d,setpts=PTS-STARTPTS,scale=%d:%d:force_original_aspect_ratio=decrease,"
-                  + "pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1[v%d]",
-              i, SEGMENT_DURATION, OUTPUT_WIDTH, cellHeight, OUTPUT_WIDTH, cellHeight, i));
+      f.append("[v").append(i).append("]");
+      filterParts.add(f.toString());
       stackInputs.add("[v" + i + "]");
     }
 
-    String vstack = String.join("", stackInputs) + "vstack=inputs=" + rows + "[out]";
-    filterParts.add(vstack);
-    String filterComplex = String.join(";", filterParts);
+    // vstack: members stacked vertically
+    filterParts.add(String.join("", stackInputs) + "vstack=inputs=" + rows + "[hstacked]");
 
-    Path segmentFile = tempDir.resolve("segment_" + slot.getOrderIndex() + ".mp4");
+    // time label centered on the full composite frame
+    filterParts.add(
+        String.format(
+            "[hstacked]drawtext=text='%s':fontsize=38:fontcolor=white%s"
+                + ":x=(w-text_w)/2:y=(h-text_h)/2"
+                + ":shadowcolor=black@0.85:shadowx=2:shadowy=2[out]",
+            escapeFfmpegText(slot.getTimeLabel()), fontfileArg()));
+
+    String filterComplex = String.join(";", filterParts);
+    Path segmentFile = tempDir.resolve("segment_" + slot.getId() + ".mp4");
 
     List<String> cmd = new ArrayList<>();
-    cmd.add("ffmpeg");
+    cmd.add(FFMPEG);
     cmd.add("-y");
     cmd.addAll(inputArgs);
     cmd.add("-filter_complex");
@@ -178,18 +252,90 @@ public class GroupRenderWorker {
     return segmentFile;
   }
 
-  private Path downloadAsset(Long assetId, Path tempDir, Long jobId, Long slotId, int index)
+  /** 영상을 SEGMENT_DURATION초로 미리 잘라 새 파일로 저장 (VFR 대응: 프레임 수 기반) */
+  private void pretrimVideo(Path input, Path output) throws Exception {
+    runCommand(
+        List.of(
+            FFMPEG, "-y",
+            "-i", input.toAbsolutePath().toString(),
+            "-vf", "fps=30",
+            "-frames:v", String.valueOf(SEGMENT_DURATION * 30),
+            "-an",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "23",
+            output.toAbsolutePath().toString()));
+  }
+
+  private Path downloadFile(
+      String s3Key, String ext, Path tempDir, Long jobId, Long slotId, int index)
       throws Exception {
-    Asset asset =
-        assetRepository
-            .findById(assetId)
-            .orElseThrow(() -> new IllegalStateException("Asset not found: " + assetId));
-    Path file = tempDir.resolve(String.format("asset_%d_%d_%d.mp4", jobId, slotId, index));
-    try (InputStream is = storageService.getObject(asset.getS3Key());
+    Path file = tempDir.resolve(String.format("asset_%d_%d_%d%s", jobId, slotId, index, ext));
+    try (InputStream is = storageService.getObject(s3Key);
         FileOutputStream fos = new FileOutputStream(file.toFile())) {
       is.transferTo(fos);
     }
     return file;
+  }
+
+  private String mimeToExt(String mime) {
+    if (mime == null) return ".bin";
+    return switch (mime) {
+      case "video/mp4" -> ".mp4";
+      case "video/quicktime" -> ".mov";
+      case "video/webm" -> ".webm";
+      case "image/jpeg", "image/jpg" -> ".jpg";
+      case "image/png" -> ".png";
+      case "image/gif" -> ".gif";
+      default -> ".bin";
+    };
+  }
+
+  /** FFmpeg drawtext에서 특수문자 이스케이프 */
+  private String escapeFfmpegText(String text) {
+    return text
+        .replace("\\", "\\\\")
+        .replace("'", "\u2019") // 작은따옴표 → 유니코드 right single quotation mark
+        .replace(":", "\\:")
+        .replace("%", "\\%")
+        .replace("\n", " ")
+        .replace("\r", "");
+  }
+
+  private static final String FFMPEG =
+      java.nio.file.Files.exists(java.nio.file.Path.of("/opt/homebrew/bin/ffmpeg"))
+          ? "/opt/homebrew/bin/ffmpeg"
+          : "ffmpeg";
+
+  // 한글 지원 폰트 경로 (macOS → Linux 순으로 탐색)
+  private static final String KOREAN_FONT = resolveKoreanFont();
+
+  private static String resolveKoreanFont() {
+    String[] candidates = {
+      "/System/Library/Fonts/AppleSDGothicNeo.ttc",           // macOS
+      "/System/Library/Fonts/Supplemental/AppleGothic.ttf",   // macOS fallback
+      "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",      // Ubuntu (fonts-nanum)
+      "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", // Ubuntu (fonts-noto-cjk)
+      "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+    };
+    for (String path : candidates) {
+      if (java.nio.file.Files.exists(java.nio.file.Path.of(path))) {
+        return path;
+      }
+    }
+    return null; // 없으면 fontfile 생략 (영문만 정상 출력)
+  }
+
+  private String fontfileArg() {
+    return KOREAN_FONT != null ? ":fontfile='" + KOREAN_FONT + "'" : "";
+  }
+
+  private void checkFfmpeg() throws Exception {
+    Process process = new ProcessBuilder(FFMPEG, "-version").redirectErrorStream(true).start();
+    int exitCode = process.waitFor();
+    if (exitCode != 0) {
+      throw new IllegalStateException("ffmpeg를 찾을 수 없습니다. 서버에 ffmpeg를 설치해주세요.");
+    }
   }
 
   private void concatSegments(List<Path> segmentFiles, Path outputFile) throws Exception {
@@ -207,7 +353,7 @@ public class GroupRenderWorker {
 
     List<String> cmd =
         List.of(
-            "ffmpeg",
+            FFMPEG,
             "-y",
             "-f",
             "concat",
@@ -215,8 +361,12 @@ public class GroupRenderWorker {
             "0",
             "-i",
             listFile.toAbsolutePath().toString(),
-            "-c",
-            "copy",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
             outputFile.toAbsolutePath().toString());
     runCommand(cmd);
   }

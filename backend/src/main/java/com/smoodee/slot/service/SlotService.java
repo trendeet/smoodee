@@ -1,5 +1,7 @@
 package com.smoodee.slot.service;
 
+import com.smoodee.asset.domain.Asset;
+import com.smoodee.asset.service.AssetService;
 import com.smoodee.global.exception.ErrorCode;
 import com.smoodee.global.exception.NotFoundException;
 import com.smoodee.group.domain.GroupMember;
@@ -10,6 +12,7 @@ import com.smoodee.slot.domain.Slot;
 import com.smoodee.slot.domain.SlotUpload;
 import com.smoodee.slot.domain.SlotUploadStatus;
 import com.smoodee.slot.dto.GroupProgressResponse;
+import com.smoodee.slot.dto.SlotResponse;
 import com.smoodee.slot.repository.SlotRepository;
 import com.smoodee.slot.repository.SlotUploadRepository;
 import java.time.LocalDateTime;
@@ -31,10 +34,11 @@ public class SlotService {
   private final SlotUploadRepository slotUploadRepository;
   private final GroupService groupService;
   private final ProjectService projectService;
+  private final AssetService assetService;
 
   @Transactional
   public Slot createSlot(Long groupId, Long userId, String timeLabel, LocalDateTime dueAt) {
-    groupService.requireOwner(groupId, userId);
+    groupService.requireMember(groupId, userId);
     int nextOrder = slotRepository.countByGroupId(groupId);
     Slot slot =
         Slot.builder()
@@ -49,7 +53,7 @@ public class SlotService {
   @Transactional
   public Slot updateSlot(
       Long groupId, Long slotId, Long userId, String timeLabel, LocalDateTime dueAt) {
-    groupService.requireOwner(groupId, userId);
+    groupService.requireMember(groupId, userId);
     Slot slot = getSlot(slotId);
     slot.update(timeLabel, dueAt);
     return slot;
@@ -57,14 +61,14 @@ public class SlotService {
 
   @Transactional
   public void deleteSlot(Long groupId, Long slotId, Long userId) {
-    groupService.requireOwner(groupId, userId);
+    groupService.requireMember(groupId, userId);
     Slot slot = getSlot(slotId);
     slotRepository.delete(slot);
   }
 
   @Transactional
   public void reorderSlots(Long groupId, Long userId, List<Long> slotIds) {
-    groupService.requireOwner(groupId, userId);
+    groupService.requireMember(groupId, userId);
     List<Slot> slots = slotRepository.findByGroupIdOrderByOrderIndex(groupId);
     Map<Long, Slot> slotMap = slots.stream().collect(Collectors.toMap(Slot::getId, s -> s));
     for (int i = 0; i < slotIds.size(); i++) {
@@ -150,9 +154,43 @@ public class SlotService {
         .build();
   }
 
+  @Transactional
+  public void updateCaption(Long groupId, Long slotId, Long userId, String caption) {
+    groupService.requireMember(groupId, userId);
+    slotUploadRepository.findBySlotIdAndUserId(slotId, userId)
+        .ifPresent(upload -> upload.updateCaption(caption));
+  }
+
+  @Transactional
+  public void deleteUpload(Long groupId, Long slotId, Long userId) {
+    groupService.requireMember(groupId, userId);
+    slotUploadRepository.findBySlotIdAndUserId(slotId, userId)
+        .ifPresent(slotUploadRepository::delete);
+  }
+
   @Transactional(readOnly = true)
-  public List<Slot> listSlots(Long groupId) {
-    return slotRepository.findByGroupIdOrderByOrderIndex(groupId);
+  public List<SlotResponse> listSlots(Long groupId, Long userId) {
+    List<Slot> slots = slotRepository.findByGroupIdOrderByOrderIndex(groupId);
+    List<Long> slotIds = slots.stream().map(Slot::getId).collect(Collectors.toList());
+    Map<Long, SlotUpload> uploadBySlotId =
+        slotUploadRepository.findBySlotIdInAndUserId(slotIds, userId).stream()
+            .collect(Collectors.toMap(SlotUpload::getSlotId, u -> u));
+
+    return slots.stream()
+        .map(slot -> {
+          SlotUpload upload = uploadBySlotId.get(slot.getId());
+          if (upload == null) {
+            return SlotResponse.from(slot);
+          }
+          try {
+            Asset asset = assetService.getAsset(upload.getAssetId());
+            String url = assetService.generateDownloadUrl(upload.getAssetId(), userId);
+            return SlotResponse.from(slot, asset.getId(), url, asset.getMime(), upload.getCaption());
+          } catch (Exception e) {
+            return SlotResponse.from(slot);
+          }
+        })
+        .collect(Collectors.toList());
   }
 
   private Slot getSlot(Long slotId) {

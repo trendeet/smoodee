@@ -16,6 +16,10 @@ import {
   FolderClock,
   Play,
   X,
+  Pencil,
+  Film,
+  Download,
+  Trash2,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import StatusBar from "@/components/ui/StatusBar";
@@ -26,6 +30,7 @@ import { groupService } from "@/lib/api/groupService";
 import { slotService } from "@/lib/api/slotService";
 import { chatService } from "@/lib/api/chatService";
 import { assetService } from "@/lib/api/assetService";
+import { renderService } from "@/lib/api/renderService";
 import { useApp } from "@/lib/context/AppContext";
 import { useAuth } from "@/lib/context/AuthContext";
 import { timeToMinutes } from "@/lib/utils/time";
@@ -71,7 +76,7 @@ const GroupScreen = () => {
     refetchInterval: 10_000,
   });
 
-  const messages = chatPage?.items ?? [];
+  const messages = chatPage ?? [];
 
   // ── Mutations ────────────────────────────────────────────────────────────
   const createSlot = useMutation({
@@ -87,7 +92,7 @@ const GroupScreen = () => {
   });
 
   const sendMessage = useMutation({
-    mutationFn: (content: string) => chatService.sendMessage(groupId!, { content }),
+    mutationFn: (body: string) => chatService.sendMessage(groupId!, { body }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["group", groupId, "chat"] }),
   });
 
@@ -97,14 +102,56 @@ const GroupScreen = () => {
   const [showTimeOrderToast, setShowTimeOrderToast] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState("status");
   const [chatInput, setChatInput] = useState("");
+  const [lastSeenMsgId, setLastSeenMsgId] = useState<number>(() => {
+    if (typeof window === "undefined" || !groupId) return 0;
+    return Number(localStorage.getItem(`chat_seen_${groupId}`) ?? 0);
+  });
   const [showMockResult, setShowMockResult] = useState(false);
   const [uploadingSlotId, setUploadingSlotId] = useState<number | null>(null);
   const [slotAssets, setSlotAssets] = useState<Record<number, { url: string; thumbnailUrl: string; isVideo: boolean }>>({});
+  const [slotCaptions, setSlotCaptions] = useState<Record<number, string>>({});
   const [playingAsset, setPlayingAsset] = useState<{ url: string; isVideo: boolean } | null>(null);
+  const [pendingReplace, setPendingReplace] = useState<{
+    slotId: number;
+    file: File;
+    localUrl: string;
+    thumbnailUrl: string;
+    isVideo: boolean;
+  } | null>(null);
+
+  const [renderJobId, setRenderJobId] = useState<number | null>(null);
+  const [renderStatus, setRenderStatus] = useState<string | null>(null);
+  const [resultVideoUrl, setResultVideoUrl] = useState<string | null>(null);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const renderPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
   const pendingSlotId = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (slots.length === 0) return;
+    const fromServer: Record<number, { url: string; thumbnailUrl: string; isVideo: boolean }> = {};
+    const captionsFromServer: Record<number, string> = {};
+    slots.forEach((slot) => {
+      if (slot.assetUrl) {
+        const isVideo = slot.assetMime?.startsWith("video/") ?? false;
+        fromServer[slot.id] = { url: slot.assetUrl, thumbnailUrl: slot.assetUrl, isVideo };
+      }
+      if (slot.caption) {
+        captionsFromServer[slot.id] = slot.caption;
+      }
+    });
+    setSlotAssets((prev) => ({ ...fromServer, ...prev }));
+    setSlotCaptions((prev) => ({ ...captionsFromServer, ...prev }));
+  }, [slots]);
+
+  useEffect(() => {
+    return () => {
+      if (renderPollRef.current) clearTimeout(renderPollRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -112,13 +159,26 @@ const GroupScreen = () => {
     }
   }, [messages, activeSubTab]);
 
+  useEffect(() => {
+    if (activeSubTab === "chat" && messages.length > 0) {
+      const latestId = messages[0].id;
+      setLastSeenMsgId(latestId);
+      localStorage.setItem(`chat_seen_${groupId}`, String(latestId));
+    }
+  }, [activeSubTab, messages, groupId]);
+
+  const hasUnread =
+    messages.length > 0 &&
+    messages[0].id > lastSeenMsgId &&
+    messages[0].userId !== userProfile?.id;
+
   if (!selectedGroup) return null;
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
   const handleInvite = () => {
     const code = group?.inviteCode;
-    if (code) navigator.clipboard.writeText(code).catch(() => {});
+    if (code && navigator.clipboard) navigator.clipboard.writeText(code).catch(() => {});
     setShowInviteToast(true);
     setTimeout(() => setShowInviteToast(false), 2000);
   };
@@ -209,8 +269,111 @@ const GroupScreen = () => {
     }
   };
 
-  const progressPercent = progress?.progressPercent ?? 0;
-  const isAllFilled = progressPercent === 100;
+  const handleReplaceFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const slotId = pendingSlotId.current;
+    if (!file || slotId === null) return;
+    e.target.value = "";
+    pendingSlotId.current = null;
+    const isVideo = file.type.startsWith("video/");
+    const localUrl = URL.createObjectURL(file);
+    const thumbnailUrl = isVideo ? await captureVideoThumbnail(localUrl) : localUrl;
+    setPendingReplace({ slotId, file, localUrl, thumbnailUrl, isVideo });
+  };
+
+  const handleReplaceConfirm = async () => {
+    if (!pendingReplace || uploadingSlotId !== null) return;
+    const { slotId, file, localUrl, thumbnailUrl, isVideo } = pendingReplace;
+    setPendingReplace(null);
+    setUploadingSlotId(slotId);
+    try {
+      const asset = await assetService.uploadAsset(selectedGroup.projectId ?? groupId!, file);
+      await slotService.bindUpload(groupId!, slotId, asset.id);
+      setSlotAssets((prev) => ({ ...prev, [slotId]: { url: asset.url ?? localUrl, thumbnailUrl, isVideo } }));
+      queryClient.invalidateQueries({ queryKey: ["group", groupId, "slots"] });
+      queryClient.invalidateQueries({ queryKey: ["group", groupId, "progress"] });
+    } finally {
+      setUploadingSlotId(null);
+    }
+  };
+
+  const handleDeleteSlot = async (slotId: number) => {
+    if (!groupId) return;
+    await slotService.deleteSlot(groupId, slotId);
+    setSlotAssets((prev) => { const next = { ...prev }; delete next[slotId]; return next; });
+    setSlotCaptions((prev) => { const next = { ...prev }; delete next[slotId]; return next; });
+    queryClient.invalidateQueries({ queryKey: ["group", groupId, "slots"] });
+    queryClient.invalidateQueries({ queryKey: ["group", groupId, "progress"] });
+  };
+
+  const handleDeleteUpload = async (slotId: number) => {
+    if (!groupId || uploadingSlotId !== null) return;
+    setUploadingSlotId(slotId);
+    try {
+      await slotService.deleteUpload(groupId, slotId);
+      setSlotAssets((prev) => {
+        const next = { ...prev };
+        delete next[slotId];
+        return next;
+      });
+      setSlotCaptions((prev) => {
+        const next = { ...prev };
+        delete next[slotId];
+        return next;
+      });
+      queryClient.invalidateQueries({ queryKey: ["group", groupId, "slots"] });
+      queryClient.invalidateQueries({ queryKey: ["group", groupId, "progress"] });
+    } finally {
+      setUploadingSlotId(null);
+    }
+  };
+
+  const handleCreateResult = async () => {
+    if (!groupId || renderStatus === "QUEUED" || renderStatus === "RUNNING") return;
+    setRenderStatus("QUEUED");
+    setResultVideoUrl(null);
+    try {
+      const job = await renderService.submitGroup(groupId);
+      setRenderJobId(job.id);
+      setRenderStatus(job.status);
+      const poll = async (id: number) => {
+        try {
+          const updated = await renderService.getRenderJob(id);
+          setRenderStatus(updated.status);
+          if (updated.status === "SUCCEEDED") {
+            const url = await renderService.getDownloadUrl(id);
+            setResultVideoUrl(url);
+            setShowResultModal(true);
+          } else if (updated.status === "FAILED") {
+            // stop polling
+          } else {
+            renderPollRef.current = setTimeout(() => poll(id), 3000);
+          }
+        } catch {
+          setRenderStatus("FAILED");
+        }
+      };
+      poll(job.id);
+    } catch {
+      setRenderStatus("FAILED");
+    }
+  };
+
+  // 전체 그룹 진행률: 멤버 수 × 슬롯 수 기준
+  // matrix: { [slotId]: { [userId]: "UPLOADED" | "MISSING" } }
+  const totalCells =
+    (progress?.slots?.length ?? slots.length) *
+    (progress?.memberUserIds?.length ?? (members.length || (group?.memberCount ?? 1)));
+  const filledCells = progress?.matrix
+    ? Object.values(progress.matrix).reduce(
+        (sum, row) =>
+          sum + (row ? Object.values(row).filter((s) => s === "UPLOADED").length : 0),
+        0
+      )
+    : 0;
+  const groupProgressPercent =
+    totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0;
+  const isAllFilled = groupProgressPercent === 100;
   const displayName = group?.name ?? selectedGroup.name;
   const memberCount = group?.memberCount ?? members.length;
 
@@ -229,12 +392,49 @@ const GroupScreen = () => {
         className="hidden"
         onChange={handleFileChange}
       />
+      <input
+        ref={replaceInputRef}
+        type="file"
+        accept="video/*,image/*"
+        className="hidden"
+        onChange={handleReplaceFileSelect}
+      />
       <MockResultModal
         isOpen={showMockResult}
         onClose={() => setShowMockResult(false)}
         memberCount={memberCount}
         slots={[]}
       />
+
+      {/* 교체 미리보기 바텀시트 */}
+      {pendingReplace && (
+        <div className="absolute inset-0 z-[150] bg-black/60 flex items-end">
+          <div className="bg-white w-full rounded-t-3xl p-5 pb-safe" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full aspect-video rounded-xl overflow-hidden bg-black mb-4">
+              {pendingReplace.isVideo ? (
+                <video src={pendingReplace.localUrl} className="w-full h-full object-cover" autoPlay muted playsInline />
+              ) : (
+                <img src={pendingReplace.thumbnailUrl} alt="preview" className="w-full h-full object-cover" />
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingReplace(null)}
+                className="flex-1 py-3 bg-gray-100 rounded-2xl text-sm font-bold text-gray-700"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleReplaceConfirm}
+                disabled={uploadingSlotId !== null}
+                className="flex-1 py-3 bg-black text-white rounded-2xl text-sm font-bold disabled:opacity-50"
+              >
+                {uploadingSlotId !== null ? "업로드 중..." : "적용"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 영상/이미지 재생 모달 */}
       {playingAsset && (
@@ -268,6 +468,54 @@ const GroupScreen = () => {
         </div>
       )}
 
+      {/* 결과 영상 모달 */}
+      {showResultModal && resultVideoUrl && (
+        <div className="absolute inset-0 z-[250] bg-black flex flex-col">
+          <div className="flex items-center justify-between px-4 py-4 shrink-0">
+            <h2 className="text-white font-bold text-base">하루공유 결과</h2>
+            <button
+              onClick={() => setShowResultModal(false)}
+              className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-white"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          <div className="flex-1 flex items-center justify-center overflow-hidden">
+            <video
+              src={resultVideoUrl}
+              className="w-full max-h-full object-contain"
+              autoPlay
+              muted
+              playsInline
+              controls
+            />
+          </div>
+          <div className="px-4 py-4 flex gap-3 shrink-0">
+            <button
+              onClick={async () => {
+                if (!renderJobId) return;
+                const shareUrl = await renderService.getShareUrl(renderJobId);
+                if (navigator.share) {
+                  navigator.share({ url: shareUrl }).catch(() => {});
+                } else {
+                  navigator.clipboard?.writeText(shareUrl).catch(() => {});
+                }
+              }}
+              className="flex-1 py-3 bg-white text-black rounded-2xl font-bold text-sm flex items-center justify-center gap-2"
+            >
+              <Share2 size={16} /> 공유하기
+            </button>
+            <a
+              href={resultVideoUrl}
+              download="dayshare-result.mp4"
+              className="flex-1 py-3 bg-white/10 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2"
+            >
+              <Download size={16} /> 저장
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="px-4 py-4 bg-white border-b border-gray-100 sticky top-0 z-20">
         <div className="flex items-center gap-2 mb-4">
@@ -275,6 +523,7 @@ const GroupScreen = () => {
             onClick={() => {
               setSelectedGroup(null);
               if (selectedGroup?.source === "home") router.push("/");
+              else router.push("/inprogress");
             }}
             className="p-1 -ml-1 rounded-full hover:bg-gray-100 text-gray-600"
           >
@@ -348,9 +597,12 @@ const GroupScreen = () => {
           </button>
           <button
             onClick={() => setActiveSubTab("chat")}
-            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 ${activeSubTab === "chat" ? "bg-black text-white" : "bg-gray-100 text-gray-500"}`}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 relative ${activeSubTab === "chat" ? "bg-black text-white" : "bg-gray-100 text-gray-500"}`}
           >
             <MessageCircle size={14} /> 채팅
+            {hasUnread && activeSubTab !== "chat" && (
+              <span className="absolute top-1 right-3 w-2 h-2 bg-red-500 rounded-full" />
+            )}
           </button>
         </div>
       </div>
@@ -370,51 +622,94 @@ const GroupScreen = () => {
             </div>
           </div>
 
-          <div className="px-4 mt-4">
+          <div className="px-4 mt-4 flex gap-2">
             <button
               onClick={() => setShowMockResult(true)}
-              className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 active:scale-98 transition-transform"
+              className="flex-1 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 active:scale-98 transition-transform"
             >
-              <Eye size={18} /> 결과 예시 보기
+              <Eye size={16} /> 예시 보기
+            </button>
+            <button
+              onClick={renderStatus === "SUCCEEDED" && resultVideoUrl ? () => setShowResultModal(true) : handleCreateResult}
+              disabled={
+                renderStatus === "QUEUED" ||
+                renderStatus === "RUNNING" ||
+                (!isAllFilled && renderStatus !== "SUCCEEDED")
+              }
+              className={`flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95
+                ${isAllFilled || renderStatus === "SUCCEEDED"
+                  ? "bg-black text-white shadow-lg"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                }
+                ${renderStatus === "QUEUED" || renderStatus === "RUNNING" ? "opacity-70" : ""}
+              `}
+            >
+              {renderStatus === "QUEUED" || renderStatus === "RUNNING" ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  렌더링 중
+                </>
+              ) : renderStatus === "SUCCEEDED" && resultVideoUrl ? (
+                <>
+                  <Film size={16} /> 결과 보기
+                </>
+              ) : (
+                <>
+                  <Film size={16} /> 결과 만들기
+                </>
+              )}
             </button>
           </div>
 
-          {isAllFilled ? (
-            <div className="mx-4 mt-4 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-3xl p-6 flex flex-col items-center justify-center shadow-xl shadow-indigo-200 overflow-hidden relative">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-xl" />
-              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mb-3 backdrop-blur-sm shadow-inner">
-                <Check size={24} className="text-white" strokeWidth={3} />
-              </div>
-              <h3 className="font-black text-xl mb-1 tracking-tight">100% 달성 완료! 🎉</h3>
-              <p className="text-xs text-indigo-100 mb-5 font-medium">오늘의 모든 기록이 채워졌습니다.</p>
-              <button
-                onClick={() => {
-                  setShowArchiveToast(true);
-                  setTimeout(() => {
-                    setShowArchiveToast(false);
-                    setSelectedGroup(null);
-                  }, 1500);
-                }}
-                className="w-full py-3.5 bg-white text-indigo-600 rounded-2xl font-black shadow-lg hover:bg-indigo-50 transition-colors active:scale-95 mb-3 flex items-center justify-center gap-2"
-              >
-                <FolderClock size={18} /> 보관함으로 옮기기
-              </button>
-              <p className="text-[10px] text-indigo-200 font-medium">2일 뒤 보관함으로 자동 이동됩니다</p>
-            </div>
-          ) : (
-            <div className="mx-4 mt-4 bg-[#1A1A1A] text-white rounded-3xl p-5 flex items-center justify-between shadow-xl shadow-gray-200 overflow-hidden relative">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 rounded-full -mr-10 -mt-10 blur-xl" />
-              <div className="relative z-10">
-                <div className="text-xs text-gray-400 mb-1 font-medium">진행률</div>
+          {/* 전체 진행률 카드 */}
+          <div className="mx-4 mt-4 bg-[#1A1A1A] text-white rounded-3xl p-5 overflow-hidden relative shadow-xl shadow-gray-200">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 rounded-full -mr-10 -mt-10 blur-xl" />
+            <div className="relative z-10 flex items-center justify-between mb-3">
+              <div>
+                <div className="text-xs text-gray-400 font-medium mb-0.5">전체 진행률</div>
                 <div className="text-3xl font-mono font-bold text-yellow-400 tracking-tighter">
-                  {progressPercent}%
+                  {groupProgressPercent}%
                 </div>
               </div>
-              <div className="h-12 w-12 rounded-full bg-white/10 flex items-center justify-center border border-white/5 backdrop-blur relative z-10">
-                <Clock size={24} className="text-yellow-400" />
+              <div className="text-right">
+                <div className="text-xs text-gray-400 font-medium mb-0.5">업로드</div>
+                <div className="text-sm font-bold text-gray-200">
+                  {filledCells} <span className="text-gray-500 font-normal">/ {totalCells}</span>
+                </div>
               </div>
             </div>
-          )}
+            {/* 프로그레스 바 */}
+            <div className="relative z-10 h-2 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${groupProgressPercent}%`,
+                  background: isAllFilled
+                    ? "linear-gradient(90deg, #6366f1, #a855f7)"
+                    : "linear-gradient(90deg, #facc15, #f97316)",
+                }}
+              />
+            </div>
+            {isAllFilled && (
+              <div className="relative z-10 mt-4 flex flex-col items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs text-indigo-300 font-medium">
+                  <Check size={12} strokeWidth={3} /> 모든 멤버의 기록이 완성됐어요!
+                </div>
+                <button
+                  onClick={() => {
+                    setShowArchiveToast(true);
+                    setTimeout(() => {
+                      setShowArchiveToast(false);
+                      setSelectedGroup(null);
+                    }, 1500);
+                  }}
+                  className="w-full py-2.5 bg-white/10 hover:bg-white/15 text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+                >
+                  <FolderClock size={14} /> 보관함으로 옮기기
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Slots */}
           <div className="p-4 grid grid-cols-2 gap-3">
@@ -426,8 +721,8 @@ const GroupScreen = () => {
                   const uploaded = slotAssets[slot.id];
                   const isFilled = !!uploaded;
                   return (
+                    <div key={slot.id} className="flex flex-col gap-1.5">
                     <div
-                      key={slot.id}
                       className="border border-gray-200 rounded-2xl flex flex-col justify-between h-36 relative overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
                     >
                       {/* 썸네일 */}
@@ -452,6 +747,33 @@ const GroupScreen = () => {
                         </div>
                       )}
 
+                      {/* 교체 / 삭제 버튼 (채워진 슬롯) */}
+                      {uploaded && (
+                        <div className="absolute bottom-2 right-2 z-20 flex gap-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              pendingSlotId.current = slot.id;
+                              replaceInputRef.current?.click();
+                            }}
+                            disabled={uploadingSlotId !== null}
+                            className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center disabled:opacity-50"
+                          >
+                            <Camera size={13} className="text-white" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteUpload(slot.id);
+                            }}
+                            disabled={uploadingSlotId !== null}
+                            className="w-7 h-7 rounded-full bg-red-500/80 flex items-center justify-center disabled:opacity-50"
+                          >
+                            <Trash2 size={11} className="text-white" />
+                          </button>
+                        </div>
+                      )}
+
                       <div className="flex justify-between items-start z-10 p-3">
                         <select
                           value={slot.timeLabel}
@@ -463,11 +785,20 @@ const GroupScreen = () => {
                             <option key={time} value={time}>{time}</option>
                           ))}
                         </select>
-                        {isFilled && (
-                          <div className="bg-green-100 p-1 rounded-full">
-                            <Check size={10} className="text-green-600" strokeWidth={3} />
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {isFilled && (
+                            <div className="bg-green-100 p-1 rounded-full">
+                              <Check size={10} className="text-green-600" strokeWidth={3} />
+                            </div>
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteSlot(slot.id); }}
+                            className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors
+                              ${isFilled ? "bg-white/20 text-white" : "bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500"}`}
+                          >
+                            <X size={10} />
+                          </button>
+                        </div>
                       </div>
 
                       {!isFilled && (
@@ -492,6 +823,27 @@ const GroupScreen = () => {
                         </span>
                       </div>
                     </div>
+                    <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl bg-gray-50 border border-transparent focus-within:border-gray-200 focus-within:bg-white transition-all group">
+                      <Pencil size={10} className="text-gray-300 group-focus-within:text-gray-400 shrink-0 transition-colors" />
+                      <input
+                        value={slotCaptions[slot.id] ?? ""}
+                        onChange={(e) =>
+                          setSlotCaptions((prev) => ({ ...prev, [slot.id]: e.target.value }))
+                        }
+                        onBlur={(e) => {
+                          if (groupId) slotService.updateCaption(groupId, slot.id, e.target.value);
+                        }}
+                        placeholder="텍스트 추가..."
+                        maxLength={100}
+                        className="flex-1 min-w-0 text-[11px] text-gray-600 bg-transparent outline-none placeholder-gray-300"
+                      />
+                      {slotCaptions[slot.id] && (
+                        <span className="text-[9px] text-gray-300 shrink-0 font-mono tabular-nums">
+                          {slotCaptions[slot.id].length}/100
+                        </span>
+                      )}
+                    </div>
+                    </div>
                   );
                 })}
             <button
@@ -513,29 +865,38 @@ const GroupScreen = () => {
       ) : (
         /* Chat Tab */
         <div className="flex flex-col h-full bg-gray-50 animate-fade-in pb-16 relative">
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-20" ref={scrollRef}>
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex flex-col ${msg.isSystem ? "items-center !my-4" : ""}`}
-              >
-                {msg.isSystem ? (
-                  <span className="text-[10px] bg-gray-200 text-gray-500 px-3 py-1 rounded-full">
-                    {msg.content}
-                  </span>
-                ) : (
-                  <>
-                    <span className="text-[10px] text-gray-500 ml-1 mb-1">{msg.userName}</span>
-                    <div className="max-w-[75%] p-3 rounded-2xl text-sm shadow-sm bg-white border border-gray-100 rounded-tl-none text-gray-800">
-                      {msg.content}
-                    </div>
-                    <span className="text-[10px] text-gray-400 mt-1 mx-1">
-                      {new Date(msg.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false })}
+          <div className="flex-1 overflow-y-auto p-4 space-y-2 pb-20" ref={scrollRef}>
+            {[...messages].reverse().map((msg) => {
+              const isMine = msg.userId === userProfile?.id;
+              const timeStr = new Date(msg.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+              if (msg.isSystem) {
+                return (
+                  <div key={msg.id} className="flex justify-center my-3">
+                    <span className="text-[10px] bg-gray-200 text-gray-500 px-3 py-1 rounded-full">
+                      {msg.body}
                     </span>
-                  </>
-                )}
-              </div>
-            ))}
+                  </div>
+                );
+              }
+              return (
+                <div key={msg.id} className={`flex flex-col ${isMine ? "items-end" : "items-start"}`}>
+                  {!isMine && (
+                    <span className="text-[10px] text-gray-500 ml-1 mb-1">{msg.userName}</span>
+                  )}
+                  <div className={`flex items-end gap-1.5 ${isMine ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`max-w-[70vw] px-3.5 py-2.5 text-sm leading-snug shadow-sm
+                      ${isMine
+                        ? "bg-[#1A1A1A] text-white rounded-2xl rounded-br-sm"
+                        : "bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-bl-sm"
+                      }`}
+                    >
+                      {msg.body}
+                    </div>
+                    <span className="text-[10px] text-gray-400 shrink-0 pb-0.5">{timeStr}</span>
+                  </div>
+                </div>
+              );
+            })}
             {messages.length === 0 && (
               <div className="flex items-center justify-center py-16 text-gray-400 text-sm">
                 아직 메시지가 없어요. 먼저 인사해보세요!

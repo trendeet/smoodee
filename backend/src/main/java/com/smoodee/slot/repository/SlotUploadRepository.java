@@ -12,4 +12,6 @@ public interface SlotUploadRepository extends JpaRepository<SlotUpload, Long> {
   List<SlotUpload> findBySlotId(Long slotId);
 
   List<SlotUpload> findBySlotIdIn(List<Long> slotIds);
+
+  List<SlotUpload> findBySlotIdInAndUserId(List<Long> slotIds, Long userId);
 }

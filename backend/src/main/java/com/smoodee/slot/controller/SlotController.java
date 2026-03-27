@@ -7,6 +7,7 @@ import com.smoodee.slot.dto.GroupProgressResponse;
 import com.smoodee.slot.dto.ReorderSlotsRequest;
 import com.smoodee.slot.dto.SlotResponse;
 import com.smoodee.slot.dto.SlotUploadRequest;
+import com.smoodee.slot.dto.UpdateCaptionRequest;
 import com.smoodee.slot.dto.UpdateSlotRequest;
 import com.smoodee.slot.service.SlotService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -38,11 +39,8 @@ public class SlotController {
   @GetMapping("/slots")
   public ResponseEntity<ApiResponse<List<SlotResponse>>> listSlots(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long groupId) {
-    List<SlotResponse> result =
-        slotService.listSlots(groupId).stream()
-            .map(SlotResponse::from)
-            .collect(Collectors.toList());
-    return ResponseEntity.ok(ApiResponse.of(result));
+    return ResponseEntity.ok(
+        ApiResponse.of(slotService.listSlots(groupId, principal.getUserId())));
   }
 
   @Operation(summary = "슬롯 추가")
@@ -104,6 +102,27 @@ public class SlotController {
       @PathVariable Long slotId,
       @Valid @RequestBody SlotUploadRequest request) {
     slotService.bindUpload(groupId, slotId, principal.getUserId(), request.getAssetId());
+    return ResponseEntity.noContent().build();
+  }
+
+  @Operation(summary = "슬롯 업로드 삭제")
+  @DeleteMapping("/slots/{slotId}/upload")
+  public ResponseEntity<Void> deleteUpload(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable Long groupId,
+      @PathVariable Long slotId) {
+    slotService.deleteUpload(groupId, slotId, principal.getUserId());
+    return ResponseEntity.noContent().build();
+  }
+
+  @Operation(summary = "슬롯 캡션 업데이트")
+  @PutMapping("/slots/{slotId}/caption")
+  public ResponseEntity<Void> updateCaption(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable Long groupId,
+      @PathVariable Long slotId,
+      @Valid @RequestBody UpdateCaptionRequest request) {
+    slotService.updateCaption(groupId, slotId, principal.getUserId(), request.getCaption());
     return ResponseEntity.noContent().build();
   }
 

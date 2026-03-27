@@ -47,6 +47,8 @@ export interface ProjectResponse {
   filledFrames?: number;
   totalFrames?: number;
   paletteColor?: string;
+  ownerId?: number;
+  frameUrls?: string[];
 }
 
 // Colorwork
@@ -130,7 +132,10 @@ export interface SlotResponse {
   dueAt?: string;
   status?: string; // "EMPTY" | "FILLED"
   userName?: string;
+  assetId?: number;
   assetUrl?: string;
+  assetMime?: string;
+  caption?: string;
 }
 
 export interface CreateSlotRequest {
@@ -142,38 +147,25 @@ export interface UpdateSlotRequest {
 }
 
 export interface GroupProgressResponse {
-  groupId: number;
-  totalSlots: number;
-  filledSlots: number;
-  progressPercent: number;
-  matrix: SlotProgressEntry[];
-}
-
-export interface SlotProgressEntry {
-  slotId: number;
-  scheduledTime: string;
-  memberStatuses: MemberSlotStatus[];
-}
-
-export interface MemberSlotStatus {
-  userId: number;
-  userName: string;
-  filled: boolean;
+  slots: { id: number; timeLabel: string; orderIndex: number }[];
+  memberUserIds: number[];
+  // slotId(string) → userId(string) → "UPLOADED" | "MISSING"
+  matrix: Record<string, Record<string, string>>;
 }
 
 // Chat
 export interface ChatMessageResponse {
   id: number;
-  groupId: number;
+  groupId?: number;
   userId: number;
   userName: string;
-  content: string;
+  body: string;
   createdAt: string;
   isSystem?: boolean;
 }
 
 export interface SendMessageRequest {
-  content: string;
+  body: string;
 }
 
 export interface CursorPageResponse<T> {
