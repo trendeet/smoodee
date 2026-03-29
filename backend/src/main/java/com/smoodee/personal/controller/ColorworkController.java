@@ -37,15 +37,25 @@ public class ColorworkController {
   @PostMapping("/projects")
   public ResponseEntity<ApiResponse<ProjectResponse>> createProject(
       @AuthenticationPrincipal CustomUserDetails principal) {
-    Project project = colorworkService.createColorworkProject(principal.getUserId());
+    Long userId = principal != null ? principal.getUserId() : null;
+    Project project = colorworkService.createColorworkProject(userId);
     return ResponseEntity.ok(ApiResponse.of(ProjectResponse.from(project)));
+  }
+
+  @Operation(summary = "컬러워크 완성 (DONE 처리)")
+  @PutMapping("/{projectId}/complete")
+  public ResponseEntity<Void> completeProject(
+      @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long projectId) {
+    colorworkService.completeProject(projectId, principal.getUserId());
+    return ResponseEntity.noContent().build();
   }
 
   @Operation(summary = "사용법 확인 완료 저장")
   @PutMapping("/{projectId}/howto-seen")
   public ResponseEntity<Void> markHowtoSeen(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long projectId) {
-    colorworkService.markHowtoSeen(projectId, principal.getUserId());
+    Long userId = principal != null ? principal.getUserId() : null;
+    colorworkService.markHowtoSeen(projectId, userId);
     return ResponseEntity.noContent().build();
   }
 
@@ -53,8 +63,8 @@ public class ColorworkController {
   @PostMapping("/{projectId}/palette/shuffle")
   public ResponseEntity<ApiResponse<PaletteShuffleResponse>> shufflePalette(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long projectId) {
-    return ResponseEntity.ok(
-        ApiResponse.of(colorworkService.shufflePalette(projectId, principal.getUserId())));
+    Long userId = principal != null ? principal.getUserId() : null;
+    return ResponseEntity.ok(ApiResponse.of(colorworkService.shufflePalette(projectId, userId)));
   }
 
   @Operation(summary = "팔레트 선택 저장")
@@ -63,8 +73,8 @@ public class ColorworkController {
       @AuthenticationPrincipal CustomUserDetails principal,
       @PathVariable Long projectId,
       @Valid @RequestBody PaletteSelectRequest request) {
-    colorworkService.selectPalette(
-        projectId, principal.getUserId(), request.getSeed(), request.getColors());
+    Long userId = principal != null ? principal.getUserId() : null;
+    colorworkService.selectPalette(projectId, userId, request.getSeed(), request.getColors());
     return ResponseEntity.noContent().build();
   }
 
@@ -74,8 +84,9 @@ public class ColorworkController {
       @AuthenticationPrincipal CustomUserDetails principal,
       @PathVariable Long projectId,
       @Valid @RequestBody GridSelectRequest request) {
+    Long userId = principal != null ? principal.getUserId() : null;
     colorworkService.selectGrid(
-        projectId, principal.getUserId(), GridType.valueOf(request.getGridType().toUpperCase()));
+        projectId, userId, GridType.valueOf(request.getGridType().toUpperCase()));
     return ResponseEntity.noContent().build();
   }
 
@@ -86,7 +97,8 @@ public class ColorworkController {
       @PathVariable Long projectId,
       @PathVariable int index,
       @Valid @RequestBody FrameBindRequest request) {
-    colorworkService.bindFrame(projectId, principal.getUserId(), index, request.getAssetId());
+    Long userId = principal != null ? principal.getUserId() : null;
+    colorworkService.bindFrame(projectId, userId, index, request.getAssetId());
     return ResponseEntity.noContent().build();
   }
 
@@ -94,7 +106,7 @@ public class ColorworkController {
   @GetMapping("/{projectId}")
   public ResponseEntity<ApiResponse<ColorworkStateResponse>> getState(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long projectId) {
-    return ResponseEntity.ok(
-        ApiResponse.of(colorworkService.getState(projectId, principal.getUserId())));
+    Long userId = principal != null ? principal.getUserId() : null;
+    return ResponseEntity.ok(ApiResponse.of(colorworkService.getState(projectId, userId)));
   }
 }

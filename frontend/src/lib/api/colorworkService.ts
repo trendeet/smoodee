@@ -7,7 +7,7 @@ import {
   ColorEntry,
   ApiResponse,
 } from "./types";
-import { randomHexPalettes } from "@/lib/utils/colors";
+import { randomHexPalettes, hexToColorName } from "@/lib/utils/colors";
 
 // ── Backend raw shapes ────────────────────────────────────────────────────────
 
@@ -33,7 +33,7 @@ function parseStoredColors(json: string | null): ColorEntry[] | undefined {
       }
       // Old format: ["#hex", ...]
       if (typeof parsed[0] === "string") {
-        return (parsed as string[]).map((hex) => ({ hex, name: hex }));
+        return (parsed as string[]).map((hex) => ({ hex, name: hexToColorName(hex) }));
       }
     }
   } catch {
@@ -50,6 +50,10 @@ export const colorworkService = {
       "/api/v1/personal/colorwork/projects"
     );
     return data.data;
+  },
+
+  async complete(projectId: number): Promise<void> {
+    await apiClient.put(`/api/v1/personal/colorwork/${projectId}/complete`);
   },
 
   async markHowtoSeen(projectId: number): Promise<void> {

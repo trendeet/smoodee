@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/context/AuthContext";
 import { useUI } from "@/lib/context/UIContext";
 import { useScraps } from "@/hooks/useScraps";
 import { useTemplates } from "@/hooks/useTemplates";
+import { userService } from "@/lib/api/userService";
 
 const MyPageScreen = () => {
   const router = useRouter();
@@ -28,10 +29,25 @@ const MyPageScreen = () => {
   const [editAvatar, setEditAvatar] = useState(
     userProfile?.avatar || "bg-gradient-to-tr from-indigo-500 to-pink-500"
   );
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
-    updateProfile({ name: editName, bio: editBio, avatar: editAvatar });
-    setIsEditing(false);
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      let avatarToSave = editAvatar;
+      if (pendingFile) {
+        const uploadedUrl = await userService.uploadAvatar(pendingFile);
+        avatarToSave = uploadedUrl;
+        setPendingFile(null);
+        // clear any previously stored local avatar
+        localStorage.removeItem("smoodee_profile_avatar");
+      }
+      updateProfile({ name: editName, bio: editBio, avatar: avatarToSave });
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleAddImage = () => {
@@ -41,6 +57,7 @@ const MyPageScreen = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setPendingFile(file);
     const reader = new FileReader();
     reader.onload = (ev) => {
       const dataUrl = ev.target?.result as string;
@@ -51,6 +68,7 @@ const MyPageScreen = () => {
   };
 
   const handleDefaultImage = () => {
+    setPendingFile(null);
     setEditAvatar("bg-gradient-to-tr from-indigo-500 to-pink-500");
   };
 
@@ -165,9 +183,10 @@ const MyPageScreen = () => {
               </button>
               <button
                 onClick={handleSave}
-                className="flex-1 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition-colors"
+                disabled={isSaving}
+                className="flex-1 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-60"
               >
-                저장 완료
+                {isSaving ? "저장 중..." : "저장 완료"}
               </button>
             </div>
           </div>

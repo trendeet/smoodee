@@ -31,7 +31,6 @@ import org.springframework.stereotype.Component;
 public class PersonalRenderWorker {
 
   private static final int OUTPUT_WIDTH = 1080;
-  private static final int OUTPUT_HEIGHT = 1920;
   private static final int PADDING = 20;
   private static final int GRID_GAP = 8;
 
@@ -58,11 +57,12 @@ public class PersonalRenderWorker {
           frameRepository.findByProjectIdOrderByFrameIndex(job.getProjectId());
 
       GridType gridType = config.getGridType();
-      int required = switch (gridType) {
-        case G2 -> 4;
-        case G6 -> 6;
-        case G3 -> 9;
-      };
+      int required =
+          switch (gridType) {
+            case G2 -> 4;
+            case G6 -> 6;
+            case G3 -> 9;
+          };
       if (frames.size() < required) {
         throw new IllegalStateException(
             "프레임 업로드가 완료되지 않았습니다. 필요: " + required + ", 현재: " + frames.size());
@@ -85,7 +85,11 @@ public class PersonalRenderWorker {
       job.markSucceeded(s3Key);
       log.info("PersonalRender succeeded: jobId={}, total={}ms", job.getId(), t4 - t0);
     } catch (Exception e) {
-      log.error("PersonalRender failed: jobId={}, elapsed={}ms", job.getId(), System.currentTimeMillis() - t0, e);
+      log.error(
+          "PersonalRender failed: jobId={}, elapsed={}ms",
+          job.getId(),
+          System.currentTimeMillis() - t0,
+          e);
       job.markFailed(e.getMessage());
     } finally {
       renderJobRepository.save(job);
@@ -124,30 +128,28 @@ public class PersonalRenderWorker {
     int cols = (gridType == GridType.G2 || gridType == GridType.G6) ? 2 : 3;
     int rows = (gridType == GridType.G6) ? 3 : (gridType == GridType.G2) ? 2 : 3;
 
+    int gridAreaWidth = OUTPUT_WIDTH - 2 * PADDING;
+    int cellWidth = (gridAreaWidth - (cols - 1) * GRID_GAP) / cols;
+    int cellHeight = cellWidth; // 정사각형 셀
+    int gridAreaHeight = rows * cellHeight + (rows - 1) * GRID_GAP;
+    int outputHeight = gridAreaHeight + 2 * PADDING;
+
     BufferedImage output =
-        new BufferedImage(OUTPUT_WIDTH, OUTPUT_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        new BufferedImage(OUTPUT_WIDTH, outputHeight, BufferedImage.TYPE_INT_RGB);
     Graphics2D g = output.createGraphics();
     g.setRenderingHint(
         RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
     g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 
-    // Background
-    Color bgColor = extractFirstColor(paletteJson);
-    g.setColor(bgColor);
-    g.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-
-    int gridAreaWidth = OUTPUT_WIDTH - 2 * PADDING;
-    int gridAreaHeight = (int) (OUTPUT_HEIGHT * 0.7);
-    int gridTop = (OUTPUT_HEIGHT - gridAreaHeight) / 2;
-
-    int cellWidth = (gridAreaWidth - (cols - 1) * GRID_GAP) / cols;
-    int cellHeight = (gridAreaHeight - (rows - 1) * GRID_GAP) / rows;
+    // 배경: 선택한 팔레트 첫 번째 색상 (없으면 흰색)
+    g.setColor(extractFirstColor(paletteJson));
+    g.fillRect(0, 0, OUTPUT_WIDTH, outputHeight);
 
     for (int i = 0; i < images.size() && i < cols * rows; i++) {
       int col = i % cols;
       int row = i / cols;
       int x = PADDING + col * (cellWidth + GRID_GAP);
-      int y = gridTop + row * (cellHeight + GRID_GAP);
+      int y = PADDING + row * (cellHeight + GRID_GAP);
 
       BufferedImage cell = centerCrop(images.get(i), cellWidth, cellHeight);
       g.drawImage(cell, x, y, cellWidth, cellHeight, null);

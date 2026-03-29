@@ -22,7 +22,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Project extends BaseTimeEntity {
 
-  @Column(nullable = false)
+  @Column(nullable = true)
   private Long userId;
 
   @Column(length = 100)

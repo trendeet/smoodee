@@ -23,7 +23,7 @@ public class Asset extends BaseTimeEntity {
   @Column(nullable = false)
   private Long projectId;
 
-  @Column(nullable = false)
+  @Column(nullable = true)
   private Long ownerUserId;
 
   @Enumerated(EnumType.STRING)

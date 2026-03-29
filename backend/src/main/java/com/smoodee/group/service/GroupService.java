@@ -104,6 +104,13 @@ public class GroupService {
   }
 
   @Transactional(readOnly = true)
+  public Group getGroupByInviteCode(String inviteCode) {
+    return groupRepository
+        .findByInviteCode(inviteCode)
+        .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INVITE_CODE));
+  }
+
+  @Transactional(readOnly = true)
   public List<GroupMember> getMembers(Long groupId) {
     return groupMemberRepository.findByGroupId(groupId);
   }
@@ -115,6 +122,18 @@ public class GroupService {
     if (!groupMemberRepository.existsByGroupIdAndUserId(groupId, userId)) {
       throw new ForbiddenException(ErrorCode.GROUP_ACCESS_DENIED);
     }
+  }
+
+  @Transactional
+  public void leaveGroup(Long groupId, Long userId) {
+    GroupMember member =
+        groupMemberRepository
+            .findByGroupIdAndUserId(groupId, userId)
+            .orElseThrow(() -> new ForbiddenException(ErrorCode.GROUP_ACCESS_DENIED));
+    if (member.getRole() == GroupMemberRole.OWNER) {
+      throw new BusinessException(ErrorCode.GROUP_OWNER_CANNOT_LEAVE);
+    }
+    groupMemberRepository.delete(member);
   }
 
   public void requireOwner(Long groupId, Long userId) {

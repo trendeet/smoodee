@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Circle,
   Film,
+  Hash,
 } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Toast from "@/components/ui/Toast";
@@ -26,6 +27,7 @@ import { useApp } from "@/lib/context/AppContext";
 import { useUI } from "@/lib/context/UIContext";
 import { useAuth } from "@/lib/context/AuthContext";
 import { projectService } from "@/lib/api/projectService";
+import { groupService } from "@/lib/api/groupService";
 
 const TEMPLATE_NAMES: Record<string, string> = {
   COLORWORK: "컬러워크",
@@ -58,6 +60,12 @@ const InProgressPage = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showArchiveToast, setShowArchiveToast] = useState(false);
 
+  // 초대코드 입장
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [isJoining, setIsJoining] = useState(false);
+
   // 선택 모드
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -65,6 +73,10 @@ const InProgressPage = () => {
   // 삭제 확인
   const [pendingDeleteIds, setPendingDeleteIds] = useState<number[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // 그룹 나가기/삭제 확인
+  const [pendingGroupAction, setPendingGroupAction] = useState<{ projectId: number; groupId: number; isOwner: boolean } | null>(null);
+  const [isGroupActioning, setIsGroupActioning] = useState(false);
 
   const {
     data: personalProjects = [],
@@ -84,7 +96,7 @@ const InProgressPage = () => {
 
   const handleGroupCardClick = (project: { id: number; groupId?: number; title: string }) => {
     if (!project.groupId) return;
-    setSelectedGroup({ id: project.groupId, projectId: project.id, name: project.title, source: "inprogress" });
+    router.push(`/inprogress/group/${project.groupId}`);
   };
 
   // ── 선택 모드 ──────────────────────────────────────────────────────────
@@ -124,6 +136,57 @@ const InProgressPage = () => {
     } finally {
       setIsDeleting(false);
       setPendingDeleteIds([]);
+    }
+  };
+
+  const handleGroupActionConfirm = async () => {
+    if (!pendingGroupAction || isGroupActioning) return;
+    setIsGroupActioning(true);
+    try {
+      if (pendingGroupAction.isOwner) {
+        await projectService.deleteProject(pendingGroupAction.projectId);
+      } else {
+        await groupService.leaveGroup(pendingGroupAction.groupId);
+      }
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    } finally {
+      setIsGroupActioning(false);
+      setPendingGroupAction(null);
+    }
+  };
+
+  const handleJoinByCode = async () => {
+    const code = joinCode.trim().toUpperCase();
+    if (!code || isJoining) return;
+    setIsJoining(true);
+    setJoinError(null);
+    try {
+      const group = await groupService.joinGroup({ inviteCode: code });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setShowJoinModal(false);
+      setJoinCode("");
+      router.push(`/inprogress/group/${group.id}`);
+    } catch (e: unknown) {
+      const code2 = (e as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code ?? "";
+      if (code2 === "ALREADY_GROUP_MEMBER") {
+        // 이미 멤버면 그냥 입장
+        try {
+          const group = await groupService.getGroupByInviteCode(code);
+          setShowJoinModal(false);
+          setJoinCode("");
+          router.push(`/inprogress/group/${group.id}`);
+        } catch {
+          setJoinError("그룹을 찾을 수 없어요.");
+        }
+      } else if (code2 === "GROUP_FULL") {
+        setJoinError("그룹이 가득 찼어요.");
+      } else if (code2 === "INVALID_INVITE_CODE") {
+        setJoinError("코드를 다시 확인해주세요.");
+      } else {
+        setJoinError("입장에 실패했어요. 다시 시도해주세요.");
+      }
+    } finally {
+      setIsJoining(false);
     }
   };
 
@@ -226,6 +289,20 @@ const InProgressPage = () => {
 
         {/* 카드 목록 */}
         <div className="p-4 space-y-4 pb-4">
+          {subTab === "group" && !isSelectMode && (
+            <button
+              onClick={() => { setShowJoinModal(true); setJoinCode(""); setJoinError(null); }}
+              className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 border border-dashed border-gray-200 rounded-2xl hover:bg-gray-100 transition-colors active:scale-[0.98]"
+            >
+              <div className="w-8 h-8 bg-white rounded-xl border border-gray-200 flex items-center justify-center shrink-0">
+                <Hash size={16} className="text-gray-500" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-bold text-gray-700">초대코드로 입장하기</p>
+                <p className="text-xs text-gray-400">친구에게 받은 코드를 입력해주세요</p>
+              </div>
+            </button>
+          )}
           {subTab === "personal" ? (
             loadingPersonal ? (
               Array(2).fill(0).map((_, i) => (
@@ -251,8 +328,24 @@ const InProgressPage = () => {
                               : <Circle size={22} className="text-gray-300" />}
                           </div>
                         )}
-                        <div className="w-12 h-12 rounded-2xl overflow-hidden bg-gradient-to-br from-red-500 to-orange-400 shadow-inner shrink-0 flex items-center justify-center">
-                          {project.thumbnailUrl ? (
+                        <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-red-500 to-orange-400 shadow-inner shrink-0 flex items-center justify-center">
+                          {project.frameUrls && project.frameUrls.length > 0 ? (
+                            <div
+                              className={`w-full h-full grid gap-[2px] p-[3px] bg-white/10 ${
+                                project.frameUrls.length === 9
+                                  ? "grid-cols-3 grid-rows-3"
+                                  : project.frameUrls.length === 6
+                                  ? "grid-cols-2 grid-rows-3"
+                                  : "grid-cols-2 grid-rows-2"
+                              }`}
+                            >
+                              {project.frameUrls.map((url, i) => (
+                                <div key={i} className="overflow-hidden rounded-[3px] min-h-0">
+                                  <img src={url} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              ))}
+                            </div>
+                          ) : project.thumbnailUrl ? (
                             <img src={project.thumbnailUrl} alt="thumbnail" className="w-full h-full object-cover" />
                           ) : (
                             <ImageIcon className="text-white/80" size={24} />
@@ -261,14 +354,6 @@ const InProgressPage = () => {
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="font-bold text-lg text-gray-900 leading-tight">{TEMPLATE_NAMES[project.templateType] ?? project.templateType}</h3>
-                            {project.paletteColor && (
-                              <div className="bg-white border border-gray-200 shadow-sm p-1 shrink-0">
-                                <div
-                                  className="w-6 h-6"
-                                  style={{ backgroundColor: project.paletteColor }}
-                                />
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -370,7 +455,18 @@ const InProgressPage = () => {
                       </div>
                       {!isSelectMode && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); requestDelete([project.id]); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (project.groupId) {
+                              setPendingGroupAction({
+                                projectId: project.id,
+                                groupId: project.groupId,
+                                isOwner: project.ownerId === userProfile?.id,
+                              });
+                            } else {
+                              requestDelete([project.id]);
+                            }
+                          }}
                           className="p-1.5 rounded-full text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
                         >
                           <Trash2 size={16} />
@@ -475,6 +571,108 @@ const InProgressPage = () => {
                 {isDeleting ? "삭제 중..." : "삭제"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 그룹 나가기/삭제 확인 모달 */}
+      {pendingGroupAction && (
+        <div
+          className="absolute inset-0 z-[100] flex items-end justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
+          onClick={() => !isGroupActioning && setPendingGroupAction(null)}
+        >
+          <div
+            className="bg-white w-full rounded-t-3xl p-6 pb-safe animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center text-center mb-6">
+              <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                <Trash2 size={24} className="text-red-400" />
+              </div>
+              <h2 className="text-xl font-black text-gray-900">
+                {pendingGroupAction.isOwner ? "그룹을 삭제할까요?" : "그룹에서 나갈까요?"}
+              </h2>
+              <p className="text-sm text-gray-500 font-medium mt-2">
+                {pendingGroupAction.isOwner
+                  ? "삭제하면 모든 멤버가 방에서 나가게 됩니다."
+                  : "나가면 다시 초대코드로 입장해야 해요."}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingGroupAction(null)}
+                disabled={isGroupActioning}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-2xl text-sm font-bold hover:bg-gray-200 transition-colors disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleGroupActionConfirm}
+                disabled={isGroupActioning}
+                className="flex-1 py-3 bg-red-500 text-white rounded-2xl text-sm font-bold hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {isGroupActioning ? "처리 중..." : pendingGroupAction.isOwner ? "삭제" : "나가기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 초대코드 입장 모달 */}
+      {showJoinModal && (
+        <div
+          className="absolute inset-0 z-[100] flex items-end justify-center bg-black/50 backdrop-blur-sm animate-fade-in"
+          onClick={() => !isJoining && setShowJoinModal(false)}
+        >
+          <div
+            className="bg-white w-full rounded-t-3xl p-6 pb-safe animate-slide-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-xl font-black">초대코드 입력</h2>
+                <p className="text-sm text-gray-500 font-medium mt-1">
+                  친구에게 받은 코드를 입력해주세요.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowJoinModal(false)}
+                className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="mb-4">
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(e) => {
+                  setJoinCode(e.target.value.toUpperCase());
+                  setJoinError(null);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && handleJoinByCode()}
+                placeholder="예: AB12CD34"
+                maxLength={20}
+                className={`w-full text-center text-2xl font-black tracking-[0.3em] py-4 px-6 rounded-2xl border-2 bg-gray-50 focus:outline-none transition-colors ${
+                  joinError
+                    ? "border-red-400 text-red-500"
+                    : "border-gray-200 focus:border-black text-gray-900"
+                }`}
+                autoFocus
+              />
+              {joinError && (
+                <p className="text-center text-sm font-bold text-red-500 mt-2">
+                  {joinError}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={handleJoinByCode}
+              disabled={!joinCode.trim() || isJoining}
+              className="w-full py-4 bg-black text-white rounded-2xl text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all"
+            >
+              {isJoining ? "입장 중..." : "입장하기"}
+            </button>
           </div>
         </div>
       )}

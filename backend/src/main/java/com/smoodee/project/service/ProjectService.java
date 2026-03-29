@@ -28,12 +28,18 @@ public class ProjectService {
             ProjectStatus.CREATED,
             ProjectStatus.SLOT_CONFIG,
             ProjectStatus.IN_PROGRESS);
+    if (type == ProjectType.GROUP) {
+      return projectRepository.findGroupProjectsByMembership(userId, statuses);
+    }
     return projectRepository.findByUserIdAndTypeAndStatuses(userId, type, statuses);
   }
 
   @Transactional(readOnly = true)
   public List<Project> listRecent(Long userId, ProjectType type) {
     List<ProjectStatus> statuses = Arrays.asList(ProjectStatus.DONE, ProjectStatus.EXPIRED);
+    if (type == ProjectType.GROUP) {
+      return projectRepository.findGroupProjectsByMembership(userId, statuses);
+    }
     return projectRepository.findByUserIdAndTypeAndStatuses(userId, type, statuses);
   }
 
@@ -72,7 +78,7 @@ public class ProjectService {
   }
 
   public void requireOwner(Project project, Long userId) {
-    if (!project.getUserId().equals(userId)) {
+    if (project.getUserId() == null || !project.getUserId().equals(userId)) {
       throw new ForbiddenException(ErrorCode.PROJECT_ACCESS_DENIED);
     }
   }

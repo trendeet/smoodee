@@ -28,6 +28,14 @@ const HEX_PALETTES: HexPalette[] = [
   { name: "Arctic",   colors: [{ hex: "#E0F2FE", name: "Ice" }, { hex: "#7DD3FC", name: "Glacier" }, { hex: "#38BDF8", name: "Arctic" }, { hex: "#0369A1", name: "Deep" }, { hex: "#0C4A6E", name: "Abyss" }] },
 ];
 
+export const hexToColorName = (hex: string): string => {
+  for (const palette of HEX_PALETTES) {
+    const entry = palette.colors.find((c) => c.hex.toLowerCase() === hex.toLowerCase());
+    if (entry) return entry.name;
+  }
+  return hex;
+};
+
 export const randomHexPalettes = (): HexPalette[] =>
   [...HEX_PALETTES].sort(() => 0.5 - Math.random()).slice(0, 3);
 

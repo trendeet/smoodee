@@ -32,8 +32,9 @@ public class AssetController {
       @AuthenticationPrincipal CustomUserDetails principal,
       @PathVariable Long projectId,
       @RequestParam("file") MultipartFile file) {
-    var asset = assetService.upload(projectId, principal.getUserId(), file);
-    String url = assetService.generateDownloadUrl(asset.getId(), principal.getUserId());
+    Long userId = principal != null ? principal.getUserId() : null;
+    var asset = assetService.upload(projectId, userId, file);
+    String url = assetService.generateDownloadUrl(asset.getId(), userId);
     return ResponseEntity.ok(ApiResponse.of(AssetResponse.from(asset, url)));
   }
 

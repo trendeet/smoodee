@@ -60,9 +60,16 @@ public class ColorworkService {
   }
 
   @Transactional
-  public void markHowtoSeen(Long projectId, Long userId) {
+  public void completeProject(Long projectId, Long userId) {
     Project project = projectService.getProject(projectId);
     projectService.requireOwner(project, userId);
+    project.transitionTo(ProjectStatus.DONE);
+    projectService.save(project);
+  }
+
+  public void markHowtoSeen(Long projectId, Long userId) {
+    Project project = projectService.getProject(projectId);
+    if (userId != null) projectService.requireOwner(project, userId);
     PersonalColorworkConfig config = getConfig(projectId);
     config.markHowtoSeen();
   }
@@ -70,7 +77,7 @@ public class ColorworkService {
   @Transactional
   public PaletteShuffleResponse shufflePalette(Long projectId, Long userId) {
     Project project = projectService.getProject(projectId);
-    projectService.requireOwner(project, userId);
+    if (userId != null) projectService.requireOwner(project, userId);
 
     long base = System.currentTimeMillis();
     List<PaletteShuffleResponse.PaletteEntry> palettes = new ArrayList<>();
@@ -88,7 +95,7 @@ public class ColorworkService {
   @Transactional
   public void selectPalette(Long projectId, Long userId, String seed, List<String> colors) {
     Project project = projectService.getProject(projectId);
-    projectService.requireOwner(project, userId);
+    if (userId != null) projectService.requireOwner(project, userId);
 
     PersonalColorworkConfig config = getConfig(projectId);
     try {
@@ -102,7 +109,7 @@ public class ColorworkService {
   @Transactional
   public void selectGrid(Long projectId, Long userId, GridType gridType) {
     Project project = projectService.getProject(projectId);
-    projectService.requireOwner(project, userId);
+    if (userId != null) projectService.requireOwner(project, userId);
 
     PersonalColorworkConfig config = getConfig(projectId);
     config.selectGrid(gridType);
@@ -113,18 +120,19 @@ public class ColorworkService {
   @Transactional
   public void bindFrame(Long projectId, Long userId, int frameIndex, Long assetId) {
     Project project = projectService.getProject(projectId);
-    projectService.requireOwner(project, userId);
+    if (userId != null) projectService.requireOwner(project, userId);
 
     PersonalColorworkConfig config = getConfig(projectId);
     if (config.getGridType() == null) {
       throw new BusinessException(ErrorCode.GRID_TYPE_NOT_SELECTED);
     }
 
-    int maxIndex = switch (config.getGridType()) {
-      case G2 -> 3;
-      case G6 -> 5;
-      case G3 -> 8;
-    };
+    int maxIndex =
+        switch (config.getGridType()) {
+          case G2 -> 3;
+          case G6 -> 5;
+          case G3 -> 8;
+        };
     if (frameIndex < 0 || frameIndex > maxIndex) {
       throw new BusinessException(ErrorCode.INVALID_FRAME_INDEX);
     }
@@ -145,49 +153,68 @@ public class ColorworkService {
   @Transactional(readOnly = true)
   public ColorworkStateResponse getState(Long projectId, Long userId) {
     Project project = projectService.getProject(projectId);
-    projectService.requireOwner(project, userId);
+    if (userId != null) projectService.requireOwner(project, userId);
 
     PersonalColorworkConfig config = getConfig(projectId);
     List<PersonalFrame> frames = frameRepository.findByProjectIdOrderByFrameIndex(projectId);
 
-    Map<Long, String> assetUrlMap = frames.stream()
-        .filter(f -> f.getAssetId() != null)
-        .collect(Collectors.toMap(
-            PersonalFrame::getAssetId,
-            f -> assetService.generateDownloadUrl(f.getAssetId(), userId)));
+    Map<Long, String> assetUrlMap =
+        frames.stream()
+            .filter(f -> f.getAssetId() != null)
+            .collect(
+                Collectors.toMap(
+                    PersonalFrame::getAssetId,
+                    f -> assetService.generateDownloadUrl(f.getAssetId(), userId)));
 
     return ColorworkStateResponse.of(config, frames, assetUrlMap);
   }
 
   @Transactional(readOnly = true)
   public int[] getFrameProgress(Long projectId) {
-    return configRepository.findByProjectId(projectId).map(config -> {
-      int total = config.getGridType() == null ? 0 : switch (config.getGridType()) {
-        case G2 -> 4;
-        case G6 -> 6;
-        case G3 -> 9;
-      };
-      int filled = (int) frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
-          .filter(f -> f.getAssetId() != null)
-          .count();
-      return new int[]{filled, total};
-    }).orElse(new int[]{0, 0});
+    return configRepository
+        .findByProjectId(projectId)
+        .map(
+            config -> {
+              int total =
+                  config.getGridType() == null
+                      ? 0
+                      : switch (config.getGridType()) {
+                        case G2 -> 4;
+                        case G6 -> 6;
+                        case G3 -> 9;
+                      };
+              int filled =
+                  (int)
+                      frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
+                          .filter(f -> f.getAssetId() != null)
+                          .count();
+              return new int[] {filled, total};
+            })
+        .orElse(new int[] {0, 0});
   }
 
   @Transactional(readOnly = true)
   public String getPaletteColor(Long projectId) {
-    return configRepository.findByProjectId(projectId).map(config -> {
-      String json = config.getSelectedPaletteJson();
-      if (json == null) return null;
-      try {
-        List<String> colors = objectMapper.readValue(json,
-            objectMapper.getTypeFactory().constructCollectionType(List.class, String.class));
-        if (colors == null || colors.isEmpty()) return null;
-        return colors.get(colors.size() / 2);
-      } catch (Exception e) {
-        return null;
-      }
-    }).orElse(null);
+    return configRepository
+        .findByProjectId(projectId)
+        .map(
+            config -> {
+              String json = config.getSelectedPaletteJson();
+              if (json == null) return null;
+              try {
+                List<String> colors =
+                    objectMapper.readValue(
+                        json,
+                        objectMapper
+                            .getTypeFactory()
+                            .constructCollectionType(List.class, String.class));
+                if (colors == null || colors.isEmpty()) return null;
+                return colors.get(colors.size() / 2);
+              } catch (Exception e) {
+                return null;
+              }
+            })
+        .orElse(null);
   }
 
   @Transactional(readOnly = true)
@@ -197,6 +224,14 @@ public class ColorworkService {
         .findFirst()
         .map(f -> assetService.generateDownloadUrl(f.getAssetId(), userId))
         .orElse(null);
+  }
+
+  @Transactional(readOnly = true)
+  public List<String> getAllFrameUrls(Long projectId, Long userId) {
+    return frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
+        .filter(f -> f.getAssetId() != null)
+        .map(f -> assetService.generateDownloadUrl(f.getAssetId(), userId))
+        .collect(Collectors.toList());
   }
 
   private PersonalColorworkConfig getConfig(Long projectId) {

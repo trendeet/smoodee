@@ -493,25 +493,34 @@ const GroupScreen = () => {
           <div className="px-4 py-4 flex gap-3 shrink-0">
             <button
               onClick={async () => {
-                if (!renderJobId) return;
-                const shareUrl = await renderService.getShareUrl(renderJobId);
-                if (navigator.share) {
-                  navigator.share({ url: shareUrl }).catch(() => {});
-                } else {
-                  navigator.clipboard?.writeText(shareUrl).catch(() => {});
+                if (!resultVideoUrl) return;
+                try {
+                  const res = await fetch(resultVideoUrl);
+                  const blob = await res.blob();
+                  const fileName = `dayshare-result.mp4`;
+                  const file = new File([blob], fileName, { type: "video/mp4" });
+                  if (navigator.canShare?.({ files: [file] })) {
+                    await navigator.share({ files: [file], title: "하루공유 결과" });
+                  } else {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = fileName;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }
+                } catch {
+                  // fallback: 링크 공유
+                  if (renderJobId) {
+                    const shareUrl = await renderService.getShareUrl(renderJobId);
+                    navigator.clipboard?.writeText(shareUrl).catch(() => {});
+                  }
                 }
               }}
               className="flex-1 py-3 bg-white text-black rounded-2xl font-bold text-sm flex items-center justify-center gap-2"
             >
               <Share2 size={16} /> 공유하기
             </button>
-            <a
-              href={resultVideoUrl}
-              download="dayshare-result.mp4"
-              className="flex-1 py-3 bg-white/10 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2"
-            >
-              <Download size={16} /> 저장
-            </a>
           </div>
         </div>
       )}

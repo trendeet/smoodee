@@ -23,8 +23,10 @@ public class OAuth2UserInfo {
 
   public static OAuth2UserInfo ofGoogle(Map<String, Object> attributes) {
     String email = (String) attributes.get("email");
-    String name = email != null ? email.split("@")[0] : "user";
-    return new OAuth2UserInfo("google", (String) attributes.get("sub"), email, name, null);
+    String googleName = (String) attributes.get("name");
+    String name = googleName != null ? googleName : (email != null ? email.split("@")[0] : "user");
+    String pictureUrl = (String) attributes.get("picture");
+    return new OAuth2UserInfo("google", (String) attributes.get("sub"), email, name, pictureUrl);
   }
 
   public static OAuth2UserInfo of(String provider, Map<String, Object> attributes) {

@@ -10,6 +10,7 @@ import com.smoodee.project.dto.ProjectResponse;
 import com.smoodee.project.service.ProjectService;
 import com.smoodee.template.domain.TemplateType;
 import io.swagger.v3.oas.annotations.Operation;
+import lombok.extern.slf4j.Slf4j;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Slf4j
 @Tag(name = "Project", description = "진행중/완료 프로젝트 API")
 @RestController
 @RequestMapping("/api/v1/projects")
@@ -49,28 +51,64 @@ public class ProjectController {
     if ("RECENT".equalsIgnoreCase(tab)) {
       result =
           projectService.listRecent(principal.getUserId(), projectType).stream()
-              .map(ProjectResponse::from)
+              .map(
+                  project -> {
+                    try {
+                      if (project.getTemplateType() == TemplateType.COLORWORK) {
+                        int[] progress = colorworkService.getFrameProgress(project.getId());
+                        String thumbnailUrl =
+                            colorworkService.getThumbnailUrl(project.getId(), principal.getUserId());
+                        String paletteColor = colorworkService.getPaletteColor(project.getId());
+                        return ProjectResponse.from(
+                            project, progress[0], progress[1], thumbnailUrl, paletteColor,
+                            colorworkService.getAllFrameUrls(project.getId(), principal.getUserId()));
+                      }
+                      if (project.getTemplateType() == TemplateType.DAYSHARE) {
+                        return groupRepository
+                            .findByProjectId(project.getId())
+                            .map(
+                                group -> {
+                                  int memberCount =
+                                      groupMemberRepository.countByGroupId(group.getId());
+                                  return ProjectResponse.from(
+                                      project, group.getId(), group.getName(), memberCount);
+                                })
+                            .orElseGet(() -> ProjectResponse.from(project));
+                      }
+                    } catch (Exception e) {
+                      log.warn("Failed to enrich recent project {}: {}", project.getId(), e.getMessage());
+                    }
+                    return ProjectResponse.from(project);
+                  })
               .collect(Collectors.toList());
     } else {
       result =
           projectService.listInProgress(principal.getUserId(), projectType).stream()
-              .map(project -> {
-                if (project.getTemplateType() == TemplateType.COLORWORK) {
-                  int[] progress = colorworkService.getFrameProgress(project.getId());
-                  String thumbnailUrl = colorworkService.getThumbnailUrl(project.getId(), principal.getUserId());
-                  String paletteColor = colorworkService.getPaletteColor(project.getId());
-                  return ProjectResponse.from(project, progress[0], progress[1], thumbnailUrl, paletteColor);
-                }
-                if (project.getTemplateType() == TemplateType.DAYSHARE) {
-                  return groupRepository.findByProjectId(project.getId())
-                      .map(group -> {
-                        int memberCount = groupMemberRepository.countByGroupId(group.getId());
-                        return ProjectResponse.from(project, group.getId(), group.getName(), memberCount);
-                      })
-                      .orElseGet(() -> ProjectResponse.from(project));
-                }
-                return ProjectResponse.from(project);
-              })
+              .map(
+                  project -> {
+                    if (project.getTemplateType() == TemplateType.COLORWORK) {
+                      int[] progress = colorworkService.getFrameProgress(project.getId());
+                      String thumbnailUrl =
+                          colorworkService.getThumbnailUrl(project.getId(), principal.getUserId());
+                      String paletteColor = colorworkService.getPaletteColor(project.getId());
+                      return ProjectResponse.from(
+                          project, progress[0], progress[1], thumbnailUrl, paletteColor,
+                          colorworkService.getAllFrameUrls(project.getId(), principal.getUserId()));
+                    }
+                    if (project.getTemplateType() == TemplateType.DAYSHARE) {
+                      return groupRepository
+                          .findByProjectId(project.getId())
+                          .map(
+                              group -> {
+                                int memberCount =
+                                    groupMemberRepository.countByGroupId(group.getId());
+                                return ProjectResponse.from(
+                                    project, group.getId(), group.getName(), memberCount);
+                              })
+                          .orElseGet(() -> ProjectResponse.from(project));
+                    }
+                    return ProjectResponse.from(project);
+                  })
               .collect(Collectors.toList());
     }
     return ResponseEntity.ok(ApiResponse.of(result));

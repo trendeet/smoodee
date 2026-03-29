@@ -43,13 +43,16 @@ public class AssetService {
     Project project = projectService.getProject(projectId);
     if (project.getType() == ProjectType.GROUP) {
       // 그룹 프로젝트: 그룹 멤버면 업로드 허용
-      groupRepository.findByProjectId(projectId).ifPresent(group -> {
-        if (!groupMemberRepository.existsByGroupIdAndUserId(group.getId(), userId)) {
-          throw new ForbiddenException(ErrorCode.GROUP_ACCESS_DENIED);
-        }
-      });
+      groupRepository
+          .findByProjectId(projectId)
+          .ifPresent(
+              group -> {
+                if (!groupMemberRepository.existsByGroupIdAndUserId(group.getId(), userId)) {
+                  throw new ForbiddenException(ErrorCode.GROUP_ACCESS_DENIED);
+                }
+              });
     } else {
-      projectService.requireOwner(project, userId);
+      if (userId != null) projectService.requireOwner(project, userId);
     }
 
     String mime = file.getContentType();
@@ -92,7 +95,7 @@ public class AssetService {
   @Transactional(readOnly = true)
   public Asset getAssetWithAccessCheck(Long assetId, Long userId) {
     Asset asset = getAsset(assetId);
-    if (!asset.getOwnerUserId().equals(userId)) {
+    if (userId != null && !userId.equals(asset.getOwnerUserId())) {
       throw new ForbiddenException(ErrorCode.ASSET_ACCESS_DENIED);
     }
     return asset;

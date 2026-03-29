@@ -42,7 +42,8 @@ public class RenderService {
     staleJobs.addAll(renderJobRepository.findByStatus(RenderJobStatus.QUEUED));
     staleJobs.forEach(
         job -> {
-          log.warn("Recovered stale render job: jobId={}, prevStatus={}", job.getId(), job.getStatus());
+          log.warn(
+              "Recovered stale render job: jobId={}, prevStatus={}", job.getId(), job.getStatus());
           job.markFailed("서버 재기동으로 인한 렌더 중단");
         });
     renderJobRepository.saveAll(staleJobs);
@@ -50,7 +51,10 @@ public class RenderService {
 
   @Transactional
   public RenderJob submitPersonalRender(Long projectId, Long userId) {
-    Project project = projectService.getProjectWithOwnerCheck(projectId, userId);
+    Project project =
+        userId != null
+            ? projectService.getProjectWithOwnerCheck(projectId, userId)
+            : projectService.getProject(projectId);
 
     renderJobRepository
         .findTopByProjectIdAndStatusOrderByCreatedAtDesc(projectId, RenderJobStatus.RUNNING)
@@ -65,12 +69,13 @@ public class RenderService {
 
     project.transitionTo(ProjectStatus.DONE);
     final RenderJob savedJob = job;
-    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-      @Override
-      public void afterCommit() {
-        personalRenderWorker.execute(savedJob);
-      }
-    });
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            personalRenderWorker.execute(savedJob);
+          }
+        });
 
     return job;
   }
@@ -96,12 +101,13 @@ public class RenderService {
         RenderJob.builder().projectId(group.getProjectId()).type(RenderJobType.GROUP_VIDEO).build();
     job = renderJobRepository.save(job);
     final RenderJob savedGroupJob = job;
-    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-      @Override
-      public void afterCommit() {
-        groupRenderWorker.execute(savedGroupJob);
-      }
-    });
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            groupRenderWorker.execute(savedGroupJob);
+          }
+        });
     return job;
   }
 
@@ -119,16 +125,17 @@ public class RenderService {
     newJob = renderJobRepository.save(newJob);
 
     final RenderJob savedNewJob = newJob;
-    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-      @Override
-      public void afterCommit() {
-        if (savedNewJob.getType() == RenderJobType.PERSONAL_IMAGE) {
-          personalRenderWorker.execute(savedNewJob);
-        } else if (savedNewJob.getType() == RenderJobType.GROUP_VIDEO) {
-          groupRenderWorker.execute(savedNewJob);
-        }
-      }
-    });
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            if (savedNewJob.getType() == RenderJobType.PERSONAL_IMAGE) {
+              personalRenderWorker.execute(savedNewJob);
+            } else if (savedNewJob.getType() == RenderJobType.GROUP_VIDEO) {
+              groupRenderWorker.execute(savedNewJob);
+            }
+          }
+        });
 
     return newJob;
   }
@@ -152,7 +159,7 @@ public class RenderService {
 
   @Transactional(readOnly = true)
   public RenderJob getLatestJobByProject(Long projectId, Long userId) {
-    projectService.getProjectWithOwnerCheck(projectId, userId);
+    if (userId != null) projectService.getProjectWithOwnerCheck(projectId, userId);
     return renderJobRepository
         .findTopByProjectIdOrderByCreatedAtDesc(projectId)
         .orElseThrow(() -> new NotFoundException(ErrorCode.RENDER_JOB_NOT_FOUND));
@@ -160,11 +167,19 @@ public class RenderService {
 
   public String getShareUrl(Long jobId, Long userId) {
     RenderJob job = getRenderJob(jobId);
-    projectService.getProjectWithOwnerCheck(job.getProjectId(), userId);
+    if (userId != null) projectService.getProjectWithOwnerCheck(job.getProjectId(), userId);
 
     if (job.getStatus() != RenderJobStatus.SUCCEEDED) {
       throw new BusinessException(ErrorCode.RENDER_NOT_SUCCEEDED);
     }
     return storageService.presignGet(job.getOutputS3Key(), Duration.ofDays(7));
+  }
+
+  public com.smoodee.render.dto.RenderJobResponse toResponse(RenderJob job) {
+    String resultUrl = null;
+    if (job.getStatus() == RenderJobStatus.SUCCEEDED && job.getOutputS3Key() != null) {
+      resultUrl = storageService.presignGet(job.getOutputS3Key(), Duration.ofHours(1));
+    }
+    return com.smoodee.render.dto.RenderJobResponse.from(job, resultUrl);
   }
 }

@@ -47,6 +47,7 @@ public enum ErrorCode {
   GROUP_FULL("그룹 정원이 초과되었습니다."),
   ALREADY_GROUP_MEMBER("이미 그룹 멤버입니다."),
   GROUP_OWNER_REQUIRED("그룹 방장만 수행할 수 있습니다."),
+  GROUP_OWNER_CANNOT_LEAVE("그룹 방장은 나갈 수 없습니다."),
 
   // Slot
   SLOT_NOT_FOUND("슬롯을 찾을 수 없습니다."),

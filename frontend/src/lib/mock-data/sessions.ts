@@ -24,7 +24,7 @@ export const INITIAL_IN_PROGRESS: InProgressSession[] = [
   {
     id: "ip_1",
     templateId: "t1",
-    title: "ColorGrab",
+    title: "컬러워크",
     step: 3,
     selectedColor: {
       name: "Ocean",

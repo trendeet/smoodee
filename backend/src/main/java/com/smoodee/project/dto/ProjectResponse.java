@@ -2,6 +2,7 @@ package com.smoodee.project.dto;
 
 import com.smoodee.project.domain.Project;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -23,6 +24,8 @@ public class ProjectResponse {
   private final String paletteColor;
   private final Long groupId;
   private final Integer memberCount;
+  private final Long ownerId;
+  private final List<String> frameUrls;
 
   public static ProjectResponse from(Project project) {
     return ProjectResponse.builder()
@@ -34,10 +37,12 @@ public class ProjectResponse {
         .createdAt(project.getCreatedAt())
         .updatedAt(project.getUpdatedAt())
         .expiresAt(project.getExpiresAt())
+        .ownerId(project.getUserId())
         .build();
   }
 
-  public static ProjectResponse from(Project project, Long groupId, String groupName, int memberCount) {
+  public static ProjectResponse from(
+      Project project, Long groupId, String groupName, int memberCount) {
     return ProjectResponse.builder()
         .id(project.getId())
         .title(groupName)
@@ -49,10 +54,17 @@ public class ProjectResponse {
         .expiresAt(project.getExpiresAt())
         .groupId(groupId)
         .memberCount(memberCount)
+        .ownerId(project.getUserId())
         .build();
   }
 
-  public static ProjectResponse from(Project project, int filledFrames, int totalFrames, String thumbnailUrl, String paletteColor) {
+  public static ProjectResponse from(
+      Project project,
+      int filledFrames,
+      int totalFrames,
+      String thumbnailUrl,
+      String paletteColor,
+      List<String> frameUrls) {
     return ProjectResponse.builder()
         .id(project.getId())
         .title(project.getTitle())
@@ -66,6 +78,8 @@ public class ProjectResponse {
         .totalFrames(totalFrames)
         .thumbnailUrl(thumbnailUrl)
         .paletteColor(paletteColor)
+        .ownerId(project.getUserId())
+        .frameUrls(frameUrls)
         .build();
   }
 }

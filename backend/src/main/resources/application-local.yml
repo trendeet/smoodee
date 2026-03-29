@@ -22,6 +22,7 @@ spring:
             scope:
               - openid
               - email
+              - profile
 
 app:
   jwt:
@@ -37,6 +38,6 @@ app:
   render:
     output-prefix: renders
   cors:
-    allowed-origins: "http://localhost:5173,http://localhost:3000"
+    allowed-origins: "http://localhost:5173,http://localhost:3000,http://localhost:3000"
   oauth2:
     redirect-uri: "http://localhost:3000/oauth2/callback"

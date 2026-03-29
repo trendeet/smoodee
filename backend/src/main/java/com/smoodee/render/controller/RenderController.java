@@ -29,7 +29,8 @@ public class RenderController {
   @PostMapping("/personal/{projectId}")
   public ResponseEntity<ApiResponse<RenderJobResponse>> submitPersonalRender(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long projectId) {
-    RenderJob job = renderService.submitPersonalRender(projectId, principal.getUserId());
+    Long userId = principal != null ? principal.getUserId() : null;
+    RenderJob job = renderService.submitPersonalRender(projectId, userId);
     return ResponseEntity.ok(ApiResponse.of(RenderJobResponse.from(job)));
   }
 
@@ -46,7 +47,7 @@ public class RenderController {
   public ResponseEntity<ApiResponse<RenderJobResponse>> getRenderJob(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long jobId) {
     return ResponseEntity.ok(
-        ApiResponse.of(RenderJobResponse.from(renderService.getRenderJob(jobId))));
+        ApiResponse.of(renderService.toResponse(renderService.getRenderJob(jobId))));
   }
 
   @Operation(summary = "렌더 작업 재시도 (FAILED 상태만 가능)")
@@ -69,15 +70,17 @@ public class RenderController {
   @GetMapping("/jobs/by-project/{projectId}/latest")
   public ResponseEntity<ApiResponse<RenderJobResponse>> getLatestJobByProject(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long projectId) {
-    RenderJob job = renderService.getLatestJobByProject(projectId, principal.getUserId());
-    return ResponseEntity.ok(ApiResponse.of(RenderJobResponse.from(job)));
+    Long userId = principal != null ? principal.getUserId() : null;
+    RenderJob job = renderService.getLatestJobByProject(projectId, userId);
+    return ResponseEntity.ok(ApiResponse.of(renderService.toResponse(job)));
   }
 
   @Operation(summary = "렌더 결과 공유 URL 발급 (SUCCEEDED만, TTL 7일)")
   @GetMapping("/jobs/{jobId}/share-url")
   public ResponseEntity<ApiResponse<Map<String, String>>> getShareUrl(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long jobId) {
-    String url = renderService.getShareUrl(jobId, principal.getUserId());
+    Long userId = principal != null ? principal.getUserId() : null;
+    String url = renderService.getShareUrl(jobId, userId);
     return ResponseEntity.ok(ApiResponse.of(Map.of("url", url)));
   }
 }

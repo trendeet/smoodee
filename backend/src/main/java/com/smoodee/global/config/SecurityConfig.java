@@ -52,7 +52,11 @@ public class SecurityConfig {
                         "/login/**",
                         "/api/v1/auth/refresh",
                         "/api/v1/templates/**",
-                        "/actuator/health")
+                        "/actuator/health",
+                        "/api/v1/personal/colorwork/**",
+                        "/api/v1/projects/*/assets",
+                        "/api/v1/render/personal/**",
+                        "/api/v1/render/jobs/**")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/v1/templates/**")
                     .permitAll()

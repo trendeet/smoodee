@@ -27,7 +27,7 @@ const FALLBACK_TEMPLATES: TemplateResponse[] = [
   {
     id: 1,
     type: "COLORWORK",
-    title: "ColorGrab",
+    title: "컬러워크",
     tags: ["개인"],
     description: "나만의 색상으로 사진 기록",
   },

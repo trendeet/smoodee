@@ -23,6 +23,13 @@ export const groupService = {
     return data.data;
   },
 
+  async getGroupByInviteCode(inviteCode: string): Promise<GroupResponse> {
+    const { data } = await apiClient.get<ApiResponse<GroupResponse>>(
+      `/api/v1/groups/invite/${inviteCode}`
+    );
+    return data.data;
+  },
+
   async getMembers(groupId: number): Promise<GroupMemberResponse[]> {
     const { data } = await apiClient.get<ApiResponse<GroupMemberResponse[]>>(
       `/api/v1/groups/${groupId}/members`
@@ -32,6 +39,10 @@ export const groupService = {
 
   async startGroup(groupId: number): Promise<void> {
     await apiClient.post(`/api/v1/groups/${groupId}/start`);
+  },
+
+  async leaveGroup(groupId: number): Promise<void> {
+    await apiClient.delete(`/api/v1/groups/${groupId}/members/me`);
   },
 
   async getPreview(groupId: number): Promise<unknown> {

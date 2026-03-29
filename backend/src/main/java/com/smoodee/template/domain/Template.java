@@ -48,4 +48,11 @@ public class Template {
     this.tags = tags;
     this.description = description;
   }
+
+  public void update(String title, String category, String tags, String description) {
+    this.title = title;
+    this.category = category;
+    this.tags = tags;
+    this.description = description;
+  }
 }

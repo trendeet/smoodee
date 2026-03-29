@@ -7,6 +7,8 @@ import com.smoodee.group.dto.GroupMemberResponse;
 import com.smoodee.group.dto.GroupResponse;
 import com.smoodee.group.dto.JoinGroupRequest;
 import com.smoodee.group.service.GroupService;
+import com.smoodee.user.domain.User;
+import com.smoodee.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -15,6 +17,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class GroupController {
 
   private final GroupService groupService;
+  private final UserService userService;
 
   @Operation(summary = "그룹 생성")
   @PostMapping
@@ -53,12 +57,29 @@ public class GroupController {
                 groupService.joinGroup(principal.getUserId(), request.getInviteCode()))));
   }
 
+  @Operation(summary = "초대코드로 그룹 조회")
+  @GetMapping("/invite/{inviteCode}")
+  public ResponseEntity<ApiResponse<GroupResponse>> getGroupByInviteCode(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable String inviteCode) {
+    return ResponseEntity.ok(
+        ApiResponse.of(GroupResponse.from(groupService.getGroupByInviteCode(inviteCode))));
+  }
+
   @Operation(summary = "그룹 상세 조회")
   @GetMapping("/{groupId}")
   public ResponseEntity<ApiResponse<GroupResponse>> getGroup(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long groupId) {
     groupService.requireMember(groupId, principal.getUserId());
     return ResponseEntity.ok(ApiResponse.of(GroupResponse.from(groupService.getGroup(groupId))));
+  }
+
+  @Operation(summary = "그룹 나가기")
+  @DeleteMapping("/{groupId}/members/me")
+  public ResponseEntity<Void> leaveGroup(
+      @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long groupId) {
+    groupService.leaveGroup(groupId, principal.getUserId());
+    return ResponseEntity.noContent().build();
   }
 
   @Operation(summary = "그룹 멤버 목록 조회")
@@ -68,7 +89,16 @@ public class GroupController {
     groupService.requireMember(groupId, principal.getUserId());
     List<GroupMemberResponse> members =
         groupService.getMembers(groupId).stream()
-            .map(GroupMemberResponse::from)
+            .map(m -> {
+              User u = userService.getUser(m.getUserId());
+              return GroupMemberResponse.builder()
+                  .userId(m.getUserId())
+                  .name(u.getName())
+                  .avatarUrl(userService.resolveAvatarUrl(u.getAvatarS3Key()))
+                  .role(m.getRole().name())
+                  .joinedAt(m.getJoinedAt())
+                  .build();
+            })
             .collect(Collectors.toList());
     return ResponseEntity.ok(ApiResponse.of(members));
   }

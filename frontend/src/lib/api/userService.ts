@@ -12,6 +12,15 @@ export const userService = {
     return data.data;
   },
 
+  async uploadAvatar(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const { data } = await apiClient.post<ApiResponse<string>>("/api/v1/me/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data.data;
+  },
+
   async deleteAccount(): Promise<void> {
     await apiClient.delete("/api/v1/me");
   },
