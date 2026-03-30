@@ -35,22 +35,8 @@ const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCar
       >
         {isColorwork ? (
           <>
-            <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 gap-0.5 opacity-80">
-              {images.map((img, i) => (
-                <div
-                  key={i}
-                  className={`bg-gray-300 bg-[url('https://images.unsplash.com/photo-${img}?w=200')] bg-cover bg-center`}
-                />
-              ))}
-            </div>
-            <div className="absolute inset-0 bg-red-600 mix-blend-multiply opacity-60" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-4 text-center z-10">
-              <span className="font-black text-3xl tracking-tighter drop-shadow-xl">
-                COLOR
-                <br />
-                Grab
-              </span>
-            </div>
+            <img src="/images/cw_thumbnail.png" alt="컬러워크" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/10" />
           </>
         ) : isDayShare ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-4 text-center">

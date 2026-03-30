@@ -61,8 +61,12 @@ const ColorWorkFlow = () => {
   // ── result ──
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [frameColor, setFrameColor] = useState<"white" | "black" | "palette">("white");
-  const [frameThickness, setFrameThickness] = useState<"none" | "thin" | "medium">("medium");
+  const [frameColor, setFrameColor] = useState<"white" | "black" | "palette">(
+    "white"
+  );
+  const [frameThickness, setFrameThickness] = useState<
+    "none" | "thin" | "medium"
+  >("medium");
 
   // ── guide (demo only) ──
   const [guideFilledSlots, setGuideFilledSlots] = useState(
@@ -96,7 +100,6 @@ const ColorWorkFlow = () => {
     }
   }, []);
 
-
   // ── Guide helpers ────────────────────────────────────────────────────────
 
   const startProject = useCallback(async () => {
@@ -123,7 +126,9 @@ const ColorWorkFlow = () => {
         return null;
       }
 
-      try { await colorworkService.markHowtoSeen(pid); } catch {}
+      try {
+        await colorworkService.markHowtoSeen(pid);
+      } catch {}
       if (selectedApiPalette) {
         try {
           await colorworkService.selectPalette(pid, {
@@ -133,7 +138,9 @@ const ColorWorkFlow = () => {
         } catch {}
       }
       if (gridType) {
-        try { await colorworkService.selectGrid(pid, gridType); } catch {}
+        try {
+          await colorworkService.selectGrid(pid, gridType);
+        } catch {}
       }
       if (updateUrl) router.replace(`/colorwork?projectId=${pid}`);
 
@@ -249,7 +256,6 @@ const ColorWorkFlow = () => {
       setIsSubmitting(false);
     }
   };
-
 
   // ── Overlay helpers ──────────────────────────────────────────────────────
 
@@ -543,7 +549,9 @@ const ColorWorkFlow = () => {
             <span
               className="text-xl font-black tracking-tight cursor-pointer"
               onClick={() => router.replace("/")}
-            >Smoodee</span>
+            >
+              Smoodee
+            </span>
           </div>
         </div>
         <div className="px-6 pt-6 pb-2">
@@ -1008,9 +1016,27 @@ const ColorWorkFlow = () => {
     const aspectClass = gridType === "G6" ? "aspect-[2/3]" : "aspect-square";
 
     const thicknessConfig = {
-      none:   { pad: 0,  gap: 0,  cssPad: "p-0",   cssGap: "gap-0",   rounded: "rounded-none" },
-      thin:   { pad: 8,  gap: 3,  cssPad: "p-1.5", cssGap: "gap-0.5", rounded: "rounded-lg" },
-      medium: { pad: 20, gap: 8,  cssPad: "p-3",   cssGap: "gap-1",   rounded: "rounded-xl" },
+      none: {
+        pad: 0,
+        gap: 0,
+        cssPad: "p-0",
+        cssGap: "gap-0",
+        rounded: "rounded-none",
+      },
+      thin: {
+        pad: 8,
+        gap: 3,
+        cssPad: "p-1.5",
+        cssGap: "gap-0.5",
+        rounded: "rounded-lg",
+      },
+      medium: {
+        pad: 20,
+        gap: 8,
+        cssPad: "p-3",
+        cssGap: "gap-1",
+        rounded: "rounded-xl",
+      },
     } as const;
     const tc = thicknessConfig[frameThickness];
 
@@ -1195,35 +1221,35 @@ const ColorWorkFlow = () => {
           </div>
 
           <div className="flex items-center gap-2 mt-3">
-              {(
-                [
-                  { key: "none" as const, p: 0, g: 0 },
-                  { key: "thin" as const, p: 2, g: 1 },
-                  { key: "medium" as const, p: 4, g: 2 },
-                ]
-              ).map(({ key, p, g }) => (
-                <button
-                  key={key}
-                  onClick={() => setFrameThickness(key)}
-                  className={`p-1.5 rounded-xl border-2 transition-all ${
-                    frameThickness === key ? "border-white bg-white/20" : "border-white/30"
-                  }`}
+            {[
+              { key: "none" as const, p: 0, g: 0 },
+              { key: "thin" as const, p: 2, g: 1 },
+              { key: "medium" as const, p: 4, g: 2 },
+            ].map(({ key, p, g }) => (
+              <button
+                key={key}
+                onClick={() => setFrameThickness(key)}
+                className={`p-1.5 rounded-xl border-2 transition-all ${
+                  frameThickness === key
+                    ? "border-white bg-white/20"
+                    : "border-white/30"
+                }`}
+              >
+                <div
+                  className="w-8 h-8 bg-white/30 flex items-center justify-center"
+                  style={{ padding: p }}
                 >
                   <div
-                    className="w-8 h-8 bg-white/30 flex items-center justify-center"
-                    style={{ padding: p }}
+                    className="w-full h-full grid grid-cols-2 grid-rows-2"
+                    style={{ gap: g }}
                   >
-                    <div
-                      className="w-full h-full grid grid-cols-2 grid-rows-2"
-                      style={{ gap: g }}
-                    >
-                      {[0,1,2,3].map(i => (
-                        <div key={i} className="bg-white/80 rounded-[1px]" />
-                      ))}
-                    </div>
+                    {[0, 1, 2, 3].map((i) => (
+                      <div key={i} className="bg-white/80 rounded-[1px]" />
+                    ))}
                   </div>
-                </button>
-              ))}
+                </div>
+              </button>
+            ))}
           </div>
         </div>
 
