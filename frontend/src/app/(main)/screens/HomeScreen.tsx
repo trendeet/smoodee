@@ -12,10 +12,10 @@ import {
   Camera,
   Sparkles,
   UserPlus,
+  MessageCircle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import StatusBar from "@/components/ui/StatusBar";
-import Button from "@/components/ui/Button";
 import TemplateCard from "@/features/templates/components/TemplateCard";
 import { useScraps } from "@/hooks/useScraps";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -43,7 +43,7 @@ const FALLBACK_TEMPLATES: TemplateResponse[] = [
 const HomeScreen = () => {
   const router = useRouter();
   const { isScrapped, toggle } = useScraps();
-  const { data: notifData, markRead } = useNotifications();
+  const { data: notifications = [], markRead } = useNotifications();
   const { data: rawTemplates, isLoading: templatesLoading } = useTemplates();
   const templatesData =
     rawTemplates && rawTemplates.length > 0
@@ -58,20 +58,26 @@ const HomeScreen = () => {
 
   const filters = ["전체", "개인", "그룹"];
 
-  const notifications = notifData?.items ?? [];
+  const unreadNotifications = notifications.filter((n) => !n.read);
+  const hasUnread = unreadNotifications.length > 0;
 
   const notifIcon = (type: string) => {
-    if (type === "GROUP_COMPLETE")
+    if (type === "GROUP_COMPLETE" || type === "GROUP_RENDER_DONE")
       return {
         icon: <Check size={16} />,
         color: "bg-green-100 text-green-600",
       };
-    if (type === "SLOT_FILLED")
+    if (type === "SLOT_FILLED" || type === "SLOT_UPLOAD_DONE")
       return { icon: <Camera size={16} />, color: "bg-blue-100 text-blue-600" };
     if (type === "NEW_TEMPLATE")
       return {
         icon: <Sparkles size={16} />,
         color: "bg-purple-100 text-purple-600",
+      };
+    if (type === "NEW_CHAT_MESSAGE")
+      return {
+        icon: <MessageCircle size={16} />,
+        color: "bg-indigo-100 text-indigo-600",
       };
     return {
       icon: <UserPlus size={16} />,
@@ -93,13 +99,15 @@ const HomeScreen = () => {
             </button>
             <h1 className="text-xl font-black tracking-tight">Smoodee</h1>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={Bell}
+          <button
             onClick={() => setShowNotifications(true)}
-            className="!p-2 rounded-full hover:bg-gray-100"
-          />
+            className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+          >
+            <Bell size={20} />
+            {hasUnread && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+            )}
+          </button>
         </div>
         <button
           onClick={() => router.push("/guide")}
@@ -226,13 +234,19 @@ const HomeScreen = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto p-2">
-            {notifications.length > 0 ? (
-              notifications.map((noti) => {
+            {unreadNotifications.length > 0 ? (
+              unreadNotifications.map((noti) => {
                 const { icon, color } = notifIcon(noti.type);
                 return (
                   <div
                     key={noti.id}
-                    onClick={() => markRead.mutate(noti.id)}
+                    onClick={() => {
+                      markRead.mutate(noti.id);
+                      if (noti.type === "NEW_CHAT_MESSAGE" && noti.referenceId) {
+                        setShowNotifications(false);
+                        router.push(`/inprogress/group/${noti.referenceId}?tab=chat`);
+                      }
+                    }}
                     className={`flex gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-colors cursor-pointer active:scale-[0.98] ${
                       !noti.read ? "bg-blue-50/30" : ""
                     }`}
@@ -244,7 +258,7 @@ const HomeScreen = () => {
                     </div>
                     <div className="flex-1 border-b border-gray-50 pb-4">
                       <p className="text-sm font-medium text-gray-900 leading-snug break-keep mb-1">
-                        {noti.message}
+                        {noti.body}
                       </p>
                       <span className="text-xs font-bold text-gray-400">
                         {new Date(noti.createdAt).toLocaleDateString("ko-KR")}

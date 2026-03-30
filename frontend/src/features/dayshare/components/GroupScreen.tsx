@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronLeft,
   Share2,
@@ -100,7 +100,10 @@ const GroupScreen = () => {
   const [showInviteToast, setShowInviteToast] = useState(false);
   const [showArchiveToast, setShowArchiveToast] = useState(false);
   const [showTimeOrderToast, setShowTimeOrderToast] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState("status");
+  const searchParams = useSearchParams();
+  const [activeSubTab, setActiveSubTab] = useState(
+    searchParams.get("tab") === "chat" ? "chat" : "status"
+  );
   const [chatInput, setChatInput] = useState("");
   const [lastSeenMsgId, setLastSeenMsgId] = useState<number>(() => {
     if (typeof window === "undefined" || !groupId) return 0;
@@ -111,6 +114,11 @@ const GroupScreen = () => {
   const [slotAssets, setSlotAssets] = useState<Record<number, { url: string; thumbnailUrl: string; isVideo: boolean }>>({});
   const [slotCaptions, setSlotCaptions] = useState<Record<number, string>>({});
   const [playingAsset, setPlayingAsset] = useState<{ url: string; isVideo: boolean } | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    type: "deleteSlot" | "deleteUpload";
+    slotId: number;
+  } | null>(null);
+
   const [pendingReplace, setPendingReplace] = useState<{
     slotId: number;
     file: File;
@@ -143,7 +151,21 @@ const GroupScreen = () => {
         captionsFromServer[slot.id] = slot.caption;
       }
     });
-    setSlotAssets((prev) => ({ ...fromServer, ...prev }));
+    setSlotAssets((prev) => {
+      const next: typeof prev = {};
+      Object.entries(fromServer).forEach(([key, serverAsset]) => {
+        const id = Number(key);
+        const existing = prev[id];
+        next[id] = {
+          ...serverAsset,
+          // 업로드 직후 로컬에서 캡처한 canvas 썸네일(data: URL)은 보존
+          thumbnailUrl: existing?.thumbnailUrl?.startsWith("data:")
+            ? existing.thumbnailUrl
+            : serverAsset.thumbnailUrl,
+        };
+      });
+      return next;
+    });
     setSlotCaptions((prev) => ({ ...captionsFromServer, ...prev }));
   }, [slots]);
 
@@ -406,6 +428,54 @@ const GroupScreen = () => {
         slots={[]}
       />
 
+      {/* 삭제 확인 바텀시트 */}
+      {pendingConfirm && (
+        <div
+          className="absolute inset-0 z-[150] bg-black/50 backdrop-blur-sm flex items-center justify-center px-6"
+          onClick={() => setPendingConfirm(null)}
+        >
+          <div
+            className="bg-white w-full rounded-3xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center text-center mb-6">
+              <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                {pendingConfirm.type === "deleteSlot"
+                  ? <X size={24} className="text-red-400" />
+                  : <Trash2 size={24} className="text-red-400" />}
+              </div>
+              <h2 className="text-xl font-black text-gray-900">
+                {pendingConfirm.type === "deleteSlot" ? "타임슬롯을 삭제할까요?" : "영상을 삭제할까요?"}
+              </h2>
+              <p className="text-sm text-gray-500 font-medium mt-2">
+                {pendingConfirm.type === "deleteSlot"
+                  ? "이 타임슬롯과 업로드된 영상이 함께 삭제됩니다."
+                  : "업로드된 영상만 삭제되고 슬롯은 유지됩니다."}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingConfirm(null)}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-2xl text-sm font-bold"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => {
+                  const { type, slotId } = pendingConfirm;
+                  setPendingConfirm(null);
+                  if (type === "deleteSlot") handleDeleteSlot(slotId);
+                  else handleDeleteUpload(slotId);
+                }}
+                className="flex-1 py-3 bg-red-500 text-white rounded-2xl text-sm font-bold"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 교체 미리보기 바텀시트 */}
       {pendingReplace && (
         <div className="absolute inset-0 z-[150] bg-black/60 flex items-end">
@@ -532,7 +602,7 @@ const GroupScreen = () => {
             onClick={() => {
               setSelectedGroup(null);
               if (selectedGroup?.source === "home") router.push("/");
-              else router.push("/inprogress");
+              else router.push("/inprogress?tab=group");
             }}
             className="p-1 -ml-1 rounded-full hover:bg-gray-100 text-gray-600"
           >
@@ -740,11 +810,24 @@ const GroupScreen = () => {
                           className="absolute inset-0 cursor-pointer"
                           onClick={() => setPlayingAsset(uploaded)}
                         >
-                          <img
-                            src={uploaded.thumbnailUrl}
-                            alt="slot"
-                            className="w-full h-full object-cover"
-                          />
+                          {uploaded.isVideo && !uploaded.thumbnailUrl.startsWith("data:") ? (
+                            <video
+                              src={uploaded.url}
+                              className="w-full h-full object-cover pointer-events-none"
+                              muted
+                              playsInline
+                              preload="metadata"
+                              onLoadedMetadata={(e) => {
+                                (e.target as HTMLVideoElement).currentTime = 0.5;
+                              }}
+                            />
+                          ) : (
+                            <img
+                              src={uploaded.thumbnailUrl}
+                              alt="slot"
+                              className="w-full h-full object-cover"
+                            />
+                          )}
                           <div className="absolute inset-0 bg-black/20" />
                           {uploaded.isVideo && (
                             <div className="absolute inset-0 flex items-center justify-center">
@@ -773,7 +856,7 @@ const GroupScreen = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteUpload(slot.id);
+                              setPendingConfirm({ type: "deleteUpload", slotId: slot.id });
                             }}
                             disabled={uploadingSlotId !== null}
                             className="w-7 h-7 rounded-full bg-red-500/80 flex items-center justify-center disabled:opacity-50"
@@ -801,7 +884,7 @@ const GroupScreen = () => {
                             </div>
                           )}
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteSlot(slot.id); }}
+                            onClick={(e) => { e.stopPropagation(); setPendingConfirm({ type: "deleteSlot", slotId: slot.id }); }}
                             className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors
                               ${isFilled ? "bg-white/20 text-white" : "bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500"}`}
                           >

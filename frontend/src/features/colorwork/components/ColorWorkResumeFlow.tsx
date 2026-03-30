@@ -709,7 +709,14 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
         <StatusBar theme="light" />
         <div className="px-4 py-3 flex justify-between items-center relative z-50">
           <div className="flex items-center gap-1">
-            {initialStep !== 4 && (
+            {initialStep === 4 ? (
+              <button
+                onClick={() => router.push("/recent")}
+                className="p-2 -ml-2 rounded-full hover:bg-white/20 transition-colors"
+              >
+                <ChevronLeft />
+              </button>
+            ) : (
               <button
                 onClick={() => setStep(3)}
                 className="p-2 -ml-2 rounded-full hover:bg-white/20 transition-colors"

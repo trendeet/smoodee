@@ -1,11 +1,12 @@
 import apiClient from "./apiClient";
-import { NotificationResponse, CursorPageResponse, ApiResponse } from "./types";
+import { NotificationResponse, ApiResponse } from "./types";
 
 export const notificationService = {
-  async listNotifications(cursor?: string): Promise<CursorPageResponse<NotificationResponse>> {
-    const { data } = await apiClient.get<
-      ApiResponse<CursorPageResponse<NotificationResponse>>
-    >("/api/v1/notifications", { params: cursor ? { cursor } : undefined });
+  async listNotifications(cursor?: number): Promise<NotificationResponse[]> {
+    const { data } = await apiClient.get<ApiResponse<NotificationResponse[]>>(
+      "/api/v1/notifications",
+      { params: cursor ? { cursor } : undefined }
+    );
     return data.data;
   },
 

@@ -196,10 +196,10 @@ export interface ScrapResponse {
 export interface NotificationResponse {
   id: number;
   type: string;
-  message: string;
+  body: string;
   read: boolean;
   createdAt: string;
-  relatedId?: number;
+  referenceId?: number;
 }
 
 // Render

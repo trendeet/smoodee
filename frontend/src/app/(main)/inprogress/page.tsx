@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, Suspense } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Menu,
@@ -51,12 +51,14 @@ const formatDate = (iso: string) => {
 
 const InProgressPage = () => {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { selectedGroup, setSelectedGroup } = useApp();
   const { openMenu } = useUI();
   const { userProfile } = useAuth();
 
-  const [subTab, setSubTab] = useState("personal");
+  const subTab = (searchParams.get("tab") as "personal" | "group") ?? "personal";
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showArchiveToast, setShowArchiveToast] = useState(false);
 
@@ -267,7 +269,7 @@ const InProgressPage = () => {
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => { setSubTab("personal"); exitSelectMode(); }}
+              onClick={() => { router.replace(`${pathname}?tab=personal`); exitSelectMode(); }}
               className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 ${
                 subTab === "personal" ? "bg-black text-white" : "bg-gray-100 text-gray-500"
               }`}
@@ -276,7 +278,7 @@ const InProgressPage = () => {
               개인
             </button>
             <button
-              onClick={() => { setSubTab("group"); exitSelectMode(); }}
+              onClick={() => { router.replace(`${pathname}?tab=group`); exitSelectMode(); }}
               className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 ${
                 subTab === "group" ? "bg-black text-white" : "bg-gray-100 text-gray-500"
               }`}
@@ -715,4 +717,10 @@ const InProgressPage = () => {
   );
 };
 
-export default InProgressPage;
+export default function Page() {
+  return (
+    <Suspense>
+      <InProgressPage />
+    </Suspense>
+  );
+}

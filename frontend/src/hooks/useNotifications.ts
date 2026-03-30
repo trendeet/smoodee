@@ -10,6 +10,9 @@ export function useNotifications() {
     queryKey: ["notifications"],
     queryFn: () => notificationService.listNotifications(),
     enabled: isLoggedIn,
+    refetchInterval: 30000,
+    staleTime: 0,
+    select: (data) => data ?? [],
   });
 
   const markRead = useMutation({

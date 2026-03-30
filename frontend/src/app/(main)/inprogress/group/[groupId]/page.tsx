@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import GroupScreen from "@/features/dayshare/components/GroupScreen";
@@ -48,5 +48,9 @@ export default function InProgressGroupPage() {
   }
   if (!ready) return null;
 
-  return <GroupScreen />;
+  return (
+    <Suspense>
+      <GroupScreen />
+    </Suspense>
+  );
 }

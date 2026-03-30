@@ -43,6 +43,7 @@ const MyPageScreen = () => {
         // clear any previously stored local avatar
         localStorage.removeItem("smoodee_profile_avatar");
       }
+      await userService.updateProfile({ name: editName, bio: editBio });
       updateProfile({ name: editName, bio: editBio, avatar: avatarToSave });
       setIsEditing(false);
     } finally {
