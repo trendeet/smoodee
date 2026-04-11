@@ -55,29 +55,11 @@ const MockResultModal = ({ isOpen, onClose, memberCount, slots }: MockResultModa
         </button>
       </div>
 
-      <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2">
-        <div className="bg-black/60 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/20 shadow-lg">
-          <span className="text-white font-bold text-sm tracking-wide">
-            {currentSlotTime}
-          </span>
-        </div>
-        <div className="flex gap-1">
-          {slots.map((_, i) => (
-            <div
-              key={i}
-              className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${
-                i === currentStep ? "bg-white scale-125" : "bg-white/30"
-              }`}
-            />
-          ))}
-        </div>
-      </div>
-
       <div className="flex-1 flex flex-col w-full h-full relative">
         {[...Array(memberCount)].map((_, memberIndex) => (
+          <React.Fragment key={memberIndex}>
           <div
-            key={memberIndex}
-            className="flex-1 w-full relative border-b border-black/20 last:border-0 overflow-hidden bg-gray-900"
+            className="flex-1 w-full relative overflow-hidden bg-gray-900"
           >
             <div
               className="absolute inset-0 w-full h-full bg-cover bg-center transition-all duration-700 ease-in-out transform"
@@ -119,6 +101,16 @@ const MockResultModal = ({ isOpen, onClose, memberCount, slots }: MockResultModa
               </div>
             </div>
           </div>
+          {memberIndex < memberCount - 1 && (
+            <div className="relative z-30 flex items-center justify-center h-0">
+              <div className="bg-black/60 backdrop-blur-md px-4 py-1 rounded-full border border-white/20 shadow-lg">
+                <span className="text-white font-bold text-sm tracking-wide">
+                  {currentSlotTime}
+                </span>
+              </div>
+            </div>
+          )}
+          </React.Fragment>
         ))}
       </div>
 

@@ -113,6 +113,7 @@ const GroupScreen = () => {
     searchParams.get("tab") === "chat" ? "chat" : "status"
   );
   const [chatInput, setChatInput] = useState("");
+  const isComposingRef = useRef(false);
   const [lastSeenMsgId, setLastSeenMsgId] = useState<number>(() => {
     if (typeof window === "undefined" || !groupId) return 0;
     return Number(localStorage.getItem(`chat_seen_${groupId}`) ?? 0);
@@ -194,6 +195,23 @@ const GroupScreen = () => {
       if (renderPollRef.current) clearTimeout(renderPollRef.current);
     };
   }, []);
+
+  // 새로고침 후에도 기존 렌더 결과 복원
+  useEffect(() => {
+    const projectId = selectedGroup?.projectId;
+    if (!projectId) return;
+    renderService.getLatestJobByProject(projectId).then(async (job) => {
+      if (!job) return;
+      setRenderJobId(job.id);
+      setRenderStatus(job.status);
+      if (job.status === "SUCCEEDED") {
+        const url = await renderService.getDownloadUrl(job.id);
+        setResultVideoUrl(url);
+      }
+    }).catch(() => {
+      // 렌더 이력 없으면 무시
+    });
+  }, [selectedGroup?.projectId]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -827,45 +845,46 @@ const GroupScreen = () => {
           </div>
 
           <div className="px-4 mt-4 flex gap-2">
-            <button
-              onClick={
-                renderStatus === "SUCCEEDED" && resultVideoUrl
-                  ? () => setShowResultModal(true)
-                  : handleCreateResult
-              }
-              disabled={
-                renderStatus === "QUEUED" ||
-                renderStatus === "RUNNING" ||
-                (!isAllFilled && renderStatus !== "SUCCEEDED")
-              }
-              className={`flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95
-                ${
-                  isAllFilled || renderStatus === "SUCCEEDED"
-                    ? "bg-black text-white shadow-lg"
-                    : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                }
-                ${
-                  renderStatus === "QUEUED" || renderStatus === "RUNNING"
-                    ? "opacity-70"
-                    : ""
-                }
-              `}
-            >
-              {renderStatus === "QUEUED" || renderStatus === "RUNNING" ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  렌더링 중
-                </>
-              ) : renderStatus === "SUCCEEDED" && resultVideoUrl ? (
-                <>
+            {renderStatus === "SUCCEEDED" && resultVideoUrl ? (
+              <>
+                <button
+                  onClick={() => setShowResultModal(true)}
+                  className="flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 bg-black text-white shadow-lg transition-all active:scale-95"
+                >
                   <Film size={16} /> 결과 보기
-                </>
-              ) : (
-                <>
-                  <Film size={16} /> 결과 만들기
-                </>
-              )}
-            </button>
+                </button>
+                <button
+                  onClick={handleCreateResult}
+                  className="flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 bg-gray-100 text-gray-700 transition-all active:scale-95"
+                >
+                  <Film size={16} /> 다시 만들기
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleCreateResult}
+                disabled={
+                  renderStatus === "QUEUED" ||
+                  renderStatus === "RUNNING" ||
+                  !isAllFilled
+                }
+                className={`flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95
+                  ${isAllFilled ? "bg-black text-white shadow-lg" : "bg-gray-100 text-gray-400 cursor-not-allowed"}
+                  ${renderStatus === "QUEUED" || renderStatus === "RUNNING" ? "opacity-70" : ""}
+                `}
+              >
+                {renderStatus === "QUEUED" || renderStatus === "RUNNING" ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    렌더링 중
+                  </>
+                ) : (
+                  <>
+                    <Film size={16} /> 결과 만들기
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           {/* 전체 진행률 카드 */}
@@ -1196,7 +1215,12 @@ const GroupScreen = () => {
               type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+              onCompositionStart={() => { isComposingRef.current = true; }}
+              onCompositionEnd={(e) => {
+                isComposingRef.current = false;
+                setChatInput((e.target as HTMLInputElement).value);
+              }}
+              onKeyDown={(e) => e.key === "Enter" && !isComposingRef.current && handleSendMessage()}
               placeholder="메시지를 입력하세요..."
               className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black/5"
             />

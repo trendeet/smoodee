@@ -47,7 +47,9 @@ public class GroupRenderWorker {
   private final AssetRepository assetRepository;
   private final StorageService storageService;
 
-  private record CellInfo(boolean isImage, String caption) {}
+  private record CellInfo(boolean isImage, String caption, boolean isMissing) {}
+
+  private record TextOverlay(int inputIdx, String xExpr, String yExpr) {}
 
   @Async("renderExecutor")
   public void execute(RenderJob job) {
@@ -146,7 +148,7 @@ public class GroupRenderWorker {
             String.format(
                 "color=%s:size=%dx%d:rate=30:duration=%d",
                 PLACEHOLDER_COLOR, cellWidth, cellHeight, SEGMENT_DURATION));
-        cellInfos.add(new CellInfo(false, null));
+        cellInfos.add(new CellInfo(false, null, true));
       } else {
         Asset asset =
             assetRepository
@@ -178,54 +180,67 @@ public class GroupRenderWorker {
           inputArgs.add("-i");
           inputArgs.add(trimmed.toAbsolutePath().toString());
         }
-        cellInfos.add(new CellInfo(isImage, caption));
+        cellInfos.add(new CellInfo(isImage, caption, false));
       }
     }
 
-    // Build per-cell filters
+    // Generate text PNGs and collect overlay info
+    ensurePilmoji();
+    List<TextOverlay> overlays = new ArrayList<>();
+    int pngInputIdx = memberIds.size();
+
     for (int i = 0; i < memberIds.size(); i++) {
       CellInfo info = cellInfos.get(i);
-      StringBuilder f = new StringBuilder();
-      f.append(String.format("[%d:v]", i));
-
-      f.append("fps=30,");
-
-      f.append("setpts=PTS-STARTPTS,");
-      f.append(
-          String.format(
-              "scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,setsar=1",
-              cellWidth, cellHeight, cellWidth, cellHeight));
-
-      // caption text centered on cell
+      String text = null;
+      int fontSize = 32;
       if (info.caption() != null) {
-        f.append(
-            String.format(
-                ",drawtext=text='%s':fontsize=22:fontcolor=white%s"
-                    + ":x=(w-text_w)/2:y=(h-text_h)/2"
-                    + ":shadowcolor=black@0.8:shadowx=2:shadowy=2"
-                    + ":box=1:boxcolor=black@0.35:boxborderw=8",
-                escapeFfmpegText(info.caption()), fontfileArg()));
-      } else if (cellInfos.get(i).isImage() == false && uploads.get(memberIds.get(i)) == null) {
-        // missing placeholder label
-        f.append(String.format(",drawtext=text='MISSING':fontsize=30:fontcolor=white@0.5%s"
-            + ":x=(w-text_w)/2:y=(h-text_h)/2", fontfileArg()));
+        text = info.caption();
+      } else if (info.isMissing()) {
+        text = "MISSING";
+        fontSize = 40;
       }
+      if (text != null) {
+        Path png = renderTextPng(text, fontSize, tempDir, "caption_" + i);
+        inputArgs.add("-i");
+        inputArgs.add(png.toAbsolutePath().toString());
+        int cellY = i * cellHeight;
+        overlays.add(new TextOverlay(pngInputIdx++,
+            "(W-w)/2", cellY + "+(" + cellHeight + "-h)/2"));
+      }
+    }
 
-      f.append("[v").append(i).append("]");
-      filterParts.add(f.toString());
+    for (int i = 1; i < rows; i++) {
+      Path png = renderTextPng(slot.getTimeLabel(), 64, tempDir, "time_" + i, 3);
+      inputArgs.add("-i");
+      inputArgs.add(png.toAbsolutePath().toString());
+      int divideY = i * cellHeight;
+      overlays.add(new TextOverlay(pngInputIdx++, "(W-w)/2", divideY + "-h/2"));
+    }
+
+    // Build per-cell scale filters (no drawtext)
+    for (int i = 0; i < memberIds.size(); i++) {
+      filterParts.add(String.format(
+          "[%d:v]fps=30,setpts=PTS-STARTPTS,"
+              + "scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,setsar=1[v%d]",
+          i, cellWidth, cellHeight, cellWidth, cellHeight, i));
       stackInputs.add("[v" + i + "]");
     }
 
-    // vstack: members stacked vertically
+    // vstack
     filterParts.add(String.join("", stackInputs) + "vstack=inputs=" + rows + "[hstacked]");
 
-    // time label centered on the full composite frame
-    filterParts.add(
-        String.format(
-            "[hstacked]drawtext=text='%s':fontsize=38:fontcolor=white%s"
-                + ":x=(w-text_w)/2:y=(h-text_h)/2"
-                + ":shadowcolor=black@0.85:shadowx=2:shadowy=2[out]",
-            escapeFfmpegText(slot.getTimeLabel()), fontfileArg()));
+    // Overlay chain: captions + time labels
+    String currentLabel = "hstacked";
+    for (int i = 0; i < overlays.size(); i++) {
+      TextOverlay ov = overlays.get(i);
+      String nextLabel = (i == overlays.size() - 1) ? "out" : "ov" + i;
+      filterParts.add(String.format("[%s][%d:v]overlay=%s:%s[%s]",
+          currentLabel, ov.inputIdx(), ov.xExpr(), ov.yExpr(), nextLabel));
+      currentLabel = nextLabel;
+    }
+    if (overlays.isEmpty()) {
+      filterParts.add("[hstacked]copy[out]");
+    }
 
     String filterComplex = String.join(";", filterParts);
     Path segmentFile = tempDir.resolve("segment_" + slot.getId() + ".mp4");
@@ -250,6 +265,57 @@ public class GroupRenderWorker {
 
     runCommand(cmd);
     return segmentFile;
+  }
+
+  /** pilmoji로 텍스트(이모지 포함)를 투명 PNG로 렌더링 */
+  private Path renderTextPng(String text, int fontSize, Path tempDir, String suffix)
+      throws Exception {
+    return renderTextPng(text, fontSize, tempDir, suffix, 0);
+  }
+
+  private Path renderTextPng(String text, int fontSize, Path tempDir, String suffix, int strokeWidth)
+      throws Exception {
+    Path script = resolveRenderScript();
+    Path output = tempDir.resolve("text_" + suffix + ".png");
+    List<String> cmd = new ArrayList<>(List.of(
+        "python3", script.toAbsolutePath().toString(),
+        text, String.valueOf(fontSize), output.toAbsolutePath().toString()));
+    if (strokeWidth > 0) cmd.add(String.valueOf(strokeWidth));
+    ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
+    Process process = pb.start();
+    String out = new String(process.getInputStream().readAllBytes());
+    int code = process.waitFor();
+    if (code != 0) {
+      throw new IllegalStateException("render_text.py 실패: " + out);
+    }
+    return output;
+  }
+
+  private Path resolveRenderScript() {
+    String[] candidates = {
+        "scripts/render_text.py",
+        "backend/scripts/render_text.py",
+    };
+    for (String c : candidates) {
+      Path p = Path.of(c);
+      if (Files.exists(p)) return p;
+    }
+    throw new IllegalStateException("render_text.py를 찾을 수 없습니다 (scripts/ 디렉토리 확인)");
+  }
+
+  /** pilmoji 설치 여부 확인 후 없으면 pip install */
+  private static void ensurePilmoji() {
+    try {
+      ProcessBuilder check = new ProcessBuilder("python3", "-c", "import pilmoji")
+          .redirectErrorStream(true);
+      if (check.start().waitFor() != 0) {
+        log.info("pilmoji 없음 → pip install pilmoji 실행");
+        new ProcessBuilder("pip3", "install", "pilmoji")
+            .redirectErrorStream(true).start().waitFor();
+      }
+    } catch (Exception e) {
+      log.warn("pilmoji 설치 확인 실패: {}", e.getMessage());
+    }
   }
 
   /** 영상을 SEGMENT_DURATION초로 미리 잘라 새 파일로 저장 (VFR 대응: 프레임 수 기반) */
@@ -291,44 +357,10 @@ public class GroupRenderWorker {
     };
   }
 
-  /** FFmpeg drawtext에서 특수문자 이스케이프 */
-  private String escapeFfmpegText(String text) {
-    return text
-        .replace("\\", "\\\\")
-        .replace("'", "\u2019") // 작은따옴표 → 유니코드 right single quotation mark
-        .replace(":", "\\:")
-        .replace("%", "\\%")
-        .replace("\n", " ")
-        .replace("\r", "");
-  }
-
   private static final String FFMPEG =
       java.nio.file.Files.exists(java.nio.file.Path.of("/opt/homebrew/bin/ffmpeg"))
           ? "/opt/homebrew/bin/ffmpeg"
           : "ffmpeg";
-
-  // 한글 지원 폰트 경로 (macOS → Linux 순으로 탐색)
-  private static final String KOREAN_FONT = resolveKoreanFont();
-
-  private static String resolveKoreanFont() {
-    String[] candidates = {
-      "/System/Library/Fonts/AppleSDGothicNeo.ttc",           // macOS
-      "/System/Library/Fonts/Supplemental/AppleGothic.ttf",   // macOS fallback
-      "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",      // Ubuntu (fonts-nanum)
-      "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", // Ubuntu (fonts-noto-cjk)
-      "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-    };
-    for (String path : candidates) {
-      if (java.nio.file.Files.exists(java.nio.file.Path.of(path))) {
-        return path;
-      }
-    }
-    return null; // 없으면 fontfile 생략 (영문만 정상 출력)
-  }
-
-  private String fontfileArg() {
-    return KOREAN_FONT != null ? ":fontfile='" + KOREAN_FONT + "'" : "";
-  }
 
   private void checkFfmpeg() throws Exception {
     Process process = new ProcessBuilder(FFMPEG, "-version").redirectErrorStream(true).start();
