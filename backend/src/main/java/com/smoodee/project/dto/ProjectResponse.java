@@ -42,7 +42,7 @@ public class ProjectResponse {
   }
 
   public static ProjectResponse from(
-      Project project, Long groupId, String groupName, int memberCount) {
+      Project project, Long groupId, String groupName, int memberCount, String thumbnailUrl) {
     return ProjectResponse.builder()
         .id(project.getId())
         .title(groupName)
@@ -54,6 +54,7 @@ public class ProjectResponse {
         .expiresAt(project.getExpiresAt())
         .groupId(groupId)
         .memberCount(memberCount)
+        .thumbnailUrl(thumbnailUrl)
         .ownerId(project.getUserId())
         .build();
   }

@@ -31,7 +31,8 @@ const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCar
       className="group cursor-pointer space-y-3 active:opacity-80 transition-opacity relative text-left"
     >
       <div
-        className={`aspect-[4/5] ${isColorwork ? "bg-gradient-to-br from-red-500 via-red-600 to-red-700" : isDayShare ? "bg-gradient-to-br from-blue-400 to-cyan-300" : "bg-gradient-to-br from-gray-400 to-gray-600"} rounded-3xl relative overflow-hidden shadow-sm ring-1 ring-black/5`}
+        className={`aspect-[4/5] ${isColorwork ? "bg-gradient-to-br from-red-500 via-red-600 to-red-700" : isDayShare ? "bg-gradient-to-br from-blue-400 to-cyan-300" : "bg-gradient-to-br from-gray-400 to-gray-600"} rounded-3xl relative overflow-hidden`}
+        style={{ boxShadow: "6px 6px 0 rgba(0,0,0,0.12)", border: "2px solid #333" }}
       >
         {isColorwork ? (
           <>

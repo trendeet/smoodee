@@ -2,7 +2,7 @@
 
 import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   Menu,
   Plus,
@@ -47,6 +47,48 @@ const formatDate = (iso: string) => {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "-";
   return `${String(d.getFullYear()).slice(2)}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+};
+
+const GroupMemberAvatars = ({ groupId }: { groupId: number }) => {
+  const { data: members = [] } = useQuery({
+    queryKey: ["group", groupId, "members"],
+    queryFn: () => groupService.getMembers(groupId),
+    staleTime: 60_000,
+  });
+
+  if (members.length === 0) {
+    return (
+      <div className="flex -space-x-2">
+        {[...Array(2)].map((_, i) => (
+          <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-gray-200" />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex -space-x-2">
+      {members.map((m) => {
+        const url = m.avatarUrl;
+        const isImg = url && (url.startsWith("http") || url.startsWith("data:"));
+        return isImg ? (
+          <img
+            key={m.userId}
+            src={url}
+            alt={m.name}
+            className="w-8 h-8 rounded-full border-2 border-white object-cover"
+          />
+        ) : (
+          <div
+            key={m.userId}
+            className={`w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-xs font-bold text-white ${url ?? "bg-gray-300"}`}
+          >
+            {!url && (m.name?.[0] ?? "?").toUpperCase()}
+          </div>
+        );
+      })}
+    </div>
+  );
 };
 
 const InProgressPage = () => {
@@ -132,7 +174,20 @@ const InProgressPage = () => {
     if (pendingDeleteIds.length === 0 || isDeleting) return;
     setIsDeleting(true);
     try {
-      await Promise.all(pendingDeleteIds.map((id) => projectService.deleteProject(id)));
+      const allProjects = [...personalProjects, ...groupProjects];
+      await Promise.all(
+        pendingDeleteIds.map((id) => {
+          const project = allProjects.find((p) => p.id === id);
+          if (project?.groupId) {
+            const isOwner =
+              !!(project.ownerId && userProfile?.id && project.ownerId === userProfile.id);
+            return isOwner
+              ? projectService.deleteProject(id)
+              : groupService.leaveGroup(project.groupId);
+          }
+          return projectService.deleteProject(id);
+        })
+      );
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       exitSelectMode();
     } finally {
@@ -430,31 +485,33 @@ const InProgressPage = () => {
                         </div>
                       )}
                       <div className="flex items-center gap-3">
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-400 to-cyan-300 overflow-hidden flex flex-col items-center justify-center shrink-0">
-                          <div className="w-6 h-6 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-1">
-                            <Film size={12} className="text-white" />
+                        {project.thumbnailUrl ? (
+                          <img
+                            src={project.thumbnailUrl}
+                            alt="cover"
+                            className="w-14 h-14 rounded-2xl object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-400 to-cyan-300 overflow-hidden flex flex-col items-center justify-center shrink-0">
+                            <div className="w-6 h-6 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-1">
+                              <Film size={12} className="text-white" />
+                            </div>
+                            <span className="font-black text-[8px] text-white leading-tight tracking-tight text-center">DAY<br />SHARE</span>
                           </div>
-                          <span className="font-black text-[8px] text-white leading-tight tracking-tight text-center">DAY<br />SHARE</span>
-                        </div>
+                        )}
                         <span className="font-bold text-base text-gray-900 leading-tight">{project.title ?? "하루공유 그룹"}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="flex -space-x-2">
-                        {[...Array(project.memberCount ?? 3)].map((_, i) => (
-                          i === 0 && userProfile?.avatar ? (
-                            userProfile.avatar.startsWith("http") || userProfile.avatar.startsWith("data:") ? (
-                              <img key={i} src={userProfile.avatar} className="w-8 h-8 rounded-full border-2 border-white object-cover" />
-                            ) : (
-                              <div key={i} className={`w-8 h-8 rounded-full border-2 border-white ${userProfile.avatar} flex items-center justify-center`}>
-                                <User size={14} className="text-white" />
-                              </div>
-                            )
-                          ) : (
+                      {project.groupId ? (
+                        <GroupMemberAvatars groupId={project.groupId} />
+                      ) : (
+                        <div className="flex -space-x-2">
+                          {[...Array(project.memberCount ?? 2)].map((_, i) => (
                             <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-gray-200" />
-                          )
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                       {!isSelectMode && (
                         <button
                           onClick={(e) => {
@@ -463,11 +520,21 @@ const InProgressPage = () => {
                               setPendingGroupAction({
                                 projectId: project.id,
                                 groupId: project.groupId,
-                                isOwner: project.ownerId === userProfile?.id,
+                                isOwner: !!(
+                                  project.ownerId &&
+                                  userProfile?.id &&
+                                  project.ownerId === userProfile.id
+                                ),
                               });
-                            } else {
+                            } else if (
+                              project.ownerId &&
+                              userProfile?.id &&
+                              project.ownerId === userProfile.id
+                            ) {
+                              // groupId 누락됐지만 소유자인 경우만 삭제 허용
                               requestDelete([project.id]);
                             }
+                            // 소유자도 아니고 groupId도 없으면 아무 동작 안 함
                           }}
                           className="p-1.5 rounded-full text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
                         >

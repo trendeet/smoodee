@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +24,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+@Slf4j
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -35,12 +37,19 @@ public class SecurityConfig {
   @Value("${app.cors.allowed-origins}")
   private String allowedOriginsRaw;
 
+  @Value("${app.oauth2.redirect-uri:http://localhost:3000/oauth2/callback}")
+  private String frontendRedirectUri;
+
+  private String getFrontendLoginUri() {
+    return frontendRedirectUri.replace("/oauth2/callback", "/login");
+  }
+
   @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
     http.csrf(AbstractHttpConfigurer::disable)
         .cors(cors -> cors.configurationSource(corsConfigurationSource()))
         .sessionManagement(
-            session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
         .authorizeHttpRequests(
             auth ->
                 auth.requestMatchers(
@@ -77,7 +86,12 @@ public class SecurityConfig {
                                   "code", "UNAUTHORIZED",
                                   "message", "인증이 필요합니다.")));
                     }))
-        .oauth2Login(oauth2 -> oauth2.successHandler(oAuth2SuccessHandler))
+        .oauth2Login(oauth2 -> oauth2
+            .successHandler(oAuth2SuccessHandler)
+            .failureHandler((request, response, exception) -> {
+              log.error("OAuth2 login failed: {}", exception.getMessage(), exception);
+              response.sendRedirect(getFrontendLoginUri() + "?error=oauth2");
+            }))
         .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();
   }

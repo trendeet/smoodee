@@ -75,7 +75,14 @@ public class GroupRenderWorker {
               .map(GroupMember::getUserId)
               .collect(Collectors.toList());
 
-      List<Slot> slots = slotRepository.findByGroupIdOrderByOrderIndex(groupId);
+      List<Slot> slots = slotRepository.findByGroupIdOrderByOrderIndex(groupId).stream()
+          .sorted(Comparator.comparing(slot -> {
+            String t = slot.getTimeLabel();
+            if (t == null || !t.contains(":")) return 0;
+            String[] parts = t.split(":");
+            return Integer.parseInt(parts[0]) * 60 + Integer.parseInt(parts[1]);
+          }))
+          .collect(Collectors.toList());
       List<Long> slotIds = slots.stream().map(Slot::getId).collect(Collectors.toList());
 
       List<SlotUpload> uploads = slotUploadRepository.findBySlotIdIn(slotIds);
@@ -111,21 +118,24 @@ public class GroupRenderWorker {
 
   /**
    * 슬롯 1개 → MP4 세그먼트 생성
-   * 레이아웃: 멤버 수만큼 열(column)을 가로로 배치 (hstack)
-   * 각 열에는 해당 멤버의 영상 + 캡션 텍스트 오버레이
-   * 상단 중앙에 시간 레이블 표시
+   * 레이아웃:
+   *   ≤6명: 세로 1열 vstack
+   *   7~8명: 2열 그리드 (hstack 쌍 → vstack)
    */
   private Path buildSegment(
       Long jobId, Slot slot, List<Long> memberIds, Map<Long, SlotUpload> uploads, Path tempDir)
       throws Exception {
 
-    int rows = memberIds.size();
-    int cellWidth = OUTPUT_WIDTH;
-    int cellHeight = OUTPUT_HEIGHT / rows;
+    boolean twoColumn = memberIds.size() >= 6;
+    int gridRows = twoColumn ? (int) Math.ceil(memberIds.size() / 2.0) : memberIds.size();
+    int cellWidth = twoColumn ? OUTPUT_WIDTH / 2 : OUTPUT_WIDTH;
+    int cellHeight = OUTPUT_HEIGHT / gridRows;
+    // 2열 + 홀수 인원이면 마지막 빈 칸을 채울 phantom 셀 1개 필요
+    int phantomCount = (twoColumn && memberIds.size() % 2 == 1) ? 1 : 0;
+    int totalCells = memberIds.size() + phantomCount;
 
     List<String> inputArgs = new ArrayList<>();
     List<String> filterParts = new ArrayList<>();
-    List<String> stackInputs = new ArrayList<>();
     List<CellInfo> cellInfos = new ArrayList<>();
 
     for (int i = 0; i < memberIds.size(); i++) {
@@ -184,50 +194,82 @@ public class GroupRenderWorker {
       }
     }
 
+    // 2열 홀수 인원: 빈 오른쪽 하단 셀을 검정 placeholder로 채움
+    if (phantomCount == 1) {
+      inputArgs.add("-f");
+      inputArgs.add("lavfi");
+      inputArgs.add("-i");
+      inputArgs.add(String.format(
+          "color=%s:size=%dx%d:rate=30:duration=%d",
+          PLACEHOLDER_COLOR, cellWidth, cellHeight, SEGMENT_DURATION));
+    }
+
     // Generate text PNGs and collect overlay info
     ensurePilmoji();
     List<TextOverlay> overlays = new ArrayList<>();
-    int pngInputIdx = memberIds.size();
+    int pngInputIdx = totalCells;  // PNG 입력은 실제 셀(+phantom) 다음 인덱스부터
 
     for (int i = 0; i < memberIds.size(); i++) {
       CellInfo info = cellInfos.get(i);
       String text = null;
-      int fontSize = 32;
+      int fontSize = 52;
+      int strokeWidth = 2;
       if (info.caption() != null) {
         text = info.caption();
       } else if (info.isMissing()) {
         text = "MISSING";
-        fontSize = 40;
+        fontSize = 48;
+        strokeWidth = 2;
       }
       if (text != null) {
-        Path png = renderTextPng(text, fontSize, tempDir, "caption_" + i);
+        Path png = renderTextPng(text, fontSize, tempDir, "caption_" + i, strokeWidth);
         inputArgs.add("-i");
         inputArgs.add(png.toAbsolutePath().toString());
-        int cellY = i * cellHeight;
-        overlays.add(new TextOverlay(pngInputIdx++,
-            "(W-w)/2", cellY + "+(" + cellHeight + "-h)/2"));
+        String xExpr, yExpr;
+        if (twoColumn) {
+          int col = i % 2;
+          int row = i / 2;
+          xExpr = (col * cellWidth) + "+(" + cellWidth + "-w)/2";
+          yExpr = (row * cellHeight) + "+(" + cellHeight + "-h)/2";
+        } else {
+          xExpr = "(W-w)/2";
+          yExpr = (i * cellHeight) + "+(" + cellHeight + "-h)/2";
+        }
+        overlays.add(new TextOverlay(pngInputIdx++, xExpr, yExpr));
       }
     }
 
-    for (int i = 1; i < rows; i++) {
-      Path png = renderTextPng(slot.getTimeLabel(), 64, tempDir, "time_" + i, 3);
+    for (int r = 1; r < gridRows; r++) {
+      Path png = renderTextPng(slot.getTimeLabel(), 84, tempDir, "time_" + r, 0, true);
       inputArgs.add("-i");
       inputArgs.add(png.toAbsolutePath().toString());
-      int divideY = i * cellHeight;
+      int divideY = r * cellHeight;
       overlays.add(new TextOverlay(pngInputIdx++, "(W-w)/2", divideY + "-h/2"));
     }
 
-    // Build per-cell scale filters (no drawtext)
-    for (int i = 0; i < memberIds.size(); i++) {
+    // Build per-cell scale filters (real cells + phantom)
+    for (int i = 0; i < totalCells; i++) {
       filterParts.add(String.format(
           "[%d:v]fps=30,setpts=PTS-STARTPTS,"
               + "scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,setsar=1[v%d]",
           i, cellWidth, cellHeight, cellWidth, cellHeight, i));
-      stackInputs.add("[v" + i + "]");
     }
 
-    // vstack
-    filterParts.add(String.join("", stackInputs) + "vstack=inputs=" + rows + "[hstacked]");
+    // Stack cells
+    if (twoColumn) {
+      // 2열: 각 행을 hstack으로 합친 뒤 vstack
+      for (int r = 0; r < gridRows; r++) {
+        filterParts.add("[v" + (r * 2) + "][v" + (r * 2 + 1) + "]hstack=inputs=2[row" + r + "]");
+      }
+      StringBuilder rowInputs = new StringBuilder();
+      for (int r = 0; r < gridRows; r++) rowInputs.append("[row").append(r).append("]");
+      filterParts.add(rowInputs + "vstack=inputs=" + gridRows + "[hstacked]");
+    } else {
+      // 1열: vstack
+      StringBuilder vstackInputs = new StringBuilder();
+      for (int i = 0; i < memberIds.size(); i++) vstackInputs.append("[v").append(i).append("]");
+      filterParts.add(vstackInputs + "vstack=inputs=" + memberIds.size() + "[hstacked]");
+    }
 
     // Overlay chain: captions + time labels
     String currentLabel = "hstacked";
@@ -275,12 +317,18 @@ public class GroupRenderWorker {
 
   private Path renderTextPng(String text, int fontSize, Path tempDir, String suffix, int strokeWidth)
       throws Exception {
+    return renderTextPng(text, fontSize, tempDir, suffix, strokeWidth, false);
+  }
+
+  private Path renderTextPng(String text, int fontSize, Path tempDir, String suffix,
+      int strokeWidth, boolean bold) throws Exception {
     Path script = resolveRenderScript();
     Path output = tempDir.resolve("text_" + suffix + ".png");
     List<String> cmd = new ArrayList<>(List.of(
         "python3", script.toAbsolutePath().toString(),
         text, String.valueOf(fontSize), output.toAbsolutePath().toString()));
-    if (strokeWidth > 0) cmd.add(String.valueOf(strokeWidth));
+    cmd.add(String.valueOf(strokeWidth));
+    if (bold) cmd.add("1");
     ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
     Process process = pb.start();
     String out = new String(process.getInputStream().readAllBytes());

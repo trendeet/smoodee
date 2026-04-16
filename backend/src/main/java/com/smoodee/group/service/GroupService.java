@@ -13,14 +13,19 @@ import com.smoodee.project.domain.Project;
 import com.smoodee.project.domain.ProjectStatus;
 import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.service.ProjectService;
+import com.smoodee.storage.service.StorageService;
 import com.smoodee.template.domain.TemplateType;
+import java.io.IOException;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
 @Service
@@ -30,13 +35,15 @@ public class GroupService {
   private static final String INVITE_CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   private static final int INVITE_CODE_LENGTH = 8;
   private static final int MAX_RETRY = 5;
+  private static final int MAX_MEMBERS = 8;
 
   private final GroupRepository groupRepository;
   private final GroupMemberRepository groupMemberRepository;
   private final ProjectService projectService;
+  private final StorageService storageService;
 
   @Transactional
-  public Group createGroup(Long userId, String name, int memberCount) {
+  public Group createGroup(Long userId, String name) {
     Project project =
         Project.builder()
             .userId(userId)
@@ -53,7 +60,6 @@ public class GroupService {
         Group.builder()
             .projectId(project.getId())
             .name(name)
-            .memberCount(memberCount)
             .inviteCode(inviteCode)
             .build();
     group = groupRepository.save(group);
@@ -81,7 +87,7 @@ public class GroupService {
     }
 
     int currentCount = groupMemberRepository.countByGroupId(group.getId());
-    if (currentCount >= group.getMemberCount()) {
+    if (currentCount >= MAX_MEMBERS) {
       throw new BusinessException(ErrorCode.GROUP_FULL);
     }
 
@@ -146,6 +152,25 @@ public class GroupService {
             .orElseThrow(() -> new ForbiddenException(ErrorCode.GROUP_ACCESS_DENIED));
     if (member.getRole() != GroupMemberRole.OWNER) {
       throw new ForbiddenException(ErrorCode.GROUP_OWNER_REQUIRED);
+    }
+  }
+
+  @Transactional
+  public String uploadCoverImage(Long groupId, Long userId, MultipartFile file) {
+    requireOwner(groupId, userId);
+    Group group = getGroup(groupId);
+    try {
+      String original = file.getOriginalFilename();
+      String ext = (original != null && original.contains("."))
+          ? original.substring(original.lastIndexOf("."))
+          : "";
+      String key = "groups/" + groupId + "/cover/" + UUID.randomUUID() + ext;
+      storageService.put(file.getInputStream(), key, file.getContentType(), file.getSize());
+      group.updateCoverImage(key);
+      groupRepository.save(group);
+      return storageService.presignGet(key, Duration.ofDays(7));
+    } catch (IOException e) {
+      throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED);
     }
   }
 

@@ -21,7 +21,9 @@ import { useScraps } from "@/hooks/useScraps";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useTemplates } from "@/hooks/useTemplates";
 import { useUI } from "@/lib/context/UIContext";
+import { useAuth } from "@/lib/context/AuthContext";
 import { TemplateResponse } from "@/lib/api/types";
+import { groupService } from "@/lib/api/groupService";
 
 const FALLBACK_TEMPLATES: TemplateResponse[] = [
   {
@@ -52,9 +54,16 @@ const HomeScreen = () => {
       ? FALLBACK_TEMPLATES
       : [];
   const { openMenu } = useUI();
+  const { isLoggedIn } = useAuth();
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [filter, setFilter] = useState("전체");
   const [searchText, setSearchText] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showDayShareSheet, setShowDayShareSheet] = useState(false);
+  const [showJoinInput, setShowJoinInput] = useState(false);
+  const [inviteCodeInput, setInviteCodeInput] = useState("");
+  const [inviteCodeError, setInviteCodeError] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
 
   const filters = ["전체", "개인", "그룹"];
 
@@ -207,11 +216,14 @@ const HomeScreen = () => {
                   template={t}
                   onClick={() => {
                     if (t.type === "COLORWORK") router.push("/colorwork");
-                    else if (t.type === "DAYSHARE") router.push("/day_share");
+                    else if (t.type === "DAYSHARE") { setShowDayShareSheet(true); setShowJoinInput(false); setInviteCodeInput(""); }
                     else router.push("/");
                   }}
                   isScrapped={isScrapped(t.type)}
-                  onScrap={() => toggle(t.type)}
+                  onScrap={() => {
+                    if (!isLoggedIn) { setShowLoginPrompt(true); return; }
+                    toggle(t.type);
+                  }}
                 />
               ));
             })()}
@@ -219,7 +231,7 @@ const HomeScreen = () => {
       </div>
 
       {showNotifications && (
-        <div className="absolute inset-0 z-50 bg-white animate-slide-left flex flex-col pb-safe">
+        <div className="absolute inset-0 z-50 bg-white animate-slide-down flex flex-col pb-safe">
           <StatusBar theme="dark" />
           <div className="px-4 py-3 flex items-center gap-3 border-b border-gray-100 sticky top-0 bg-white/95 backdrop-blur-md z-10">
             <button
@@ -282,6 +294,120 @@ const HomeScreen = () => {
                 오래된 알림이 없습니다
               </span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 하루 공유 선택 바텀 시트 */}
+      {showDayShareSheet && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+          onClick={() => setShowDayShareSheet(false)}
+        >
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative w-full max-w-[390px] bg-white rounded-3xl px-6 pt-6 pb-8 mx-4 animate-fade-in shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-6" />
+            {!showJoinInput ? (
+              <>
+                <h2 className="text-lg font-black text-gray-900 mb-1">하루 공유</h2>
+                <p className="text-sm text-gray-400 mb-6">그룹을 만들거나 초대코드로 입장하세요.</p>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => { setShowDayShareSheet(false); router.push("/day_share"); }}
+                    className="w-full py-4 bg-black text-white font-bold rounded-2xl text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+                  >
+                    <UserPlus size={16} /> 그룹 만들기
+                  </button>
+                  <button
+                    onClick={() => setShowJoinInput(true)}
+                    className="w-full py-4 font-bold rounded-2xl text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform text-gray-700"
+                    style={{ background: "#F8FAFC", border: "3px solid #333", boxShadow: "4px 4px 0 rgba(0,0,0,0.12)" }}
+                  >
+                    <MessageCircle size={16} /> 그룹 입장하기
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setShowJoinInput(false)}
+                  className="mb-4 p-1 -ml-1 rounded-full hover:bg-gray-100 w-fit"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <h2 className="text-lg font-black text-gray-900 mb-1">그룹 입장하기</h2>
+                <p className="text-sm text-gray-400 mb-6">초대코드를 입력해주세요.</p>
+                <input
+                  type="text"
+                  value={inviteCodeInput}
+                  onChange={(e) => { setInviteCodeInput(e.target.value.toUpperCase()); setInviteCodeError(false); }}
+                  placeholder="초대코드 입력"
+                  className={`w-full bg-gray-50 rounded-2xl px-4 py-4 font-bold text-center text-lg tracking-widest focus:outline-none focus:ring-2 transition-all mb-1 border ${inviteCodeError ? "border-red-400 focus:ring-red-200" : "border-gray-200 focus:ring-black/10"}`}
+                  maxLength={8}
+                  autoFocus
+                />
+                {inviteCodeError && (
+                  <p className="text-xs text-red-500 font-medium text-center mb-3">존재하지 않는 초대코드예요. 다시 확인해주세요.</p>
+                )}
+                <div className={inviteCodeError ? "mt-1" : "mt-4"}>
+                  <button
+                    onClick={async () => {
+                      if (!inviteCodeInput.trim() || isJoining) return;
+                      setIsJoining(true);
+                      setInviteCodeError(false);
+                      try {
+                        await groupService.getGroupByInviteCode(inviteCodeInput.trim());
+                        setShowDayShareSheet(false);
+                        router.push(`/group/${inviteCodeInput.trim()}`);
+                      } catch {
+                        setInviteCodeError(true);
+                      } finally {
+                        setIsJoining(false);
+                      }
+                    }}
+                    disabled={!inviteCodeInput.trim() || isJoining}
+                    className="w-full py-4 bg-black text-white font-bold rounded-2xl text-sm active:scale-[0.98] transition-transform disabled:opacity-40 flex items-center justify-center gap-2"
+                  >
+                    {isJoining ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : "입장하기"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 로그인 필요 팝업 */}
+      {showLoginPrompt && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center px-8"
+          onClick={() => setShowLoginPrompt(false)}
+        >
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative w-full max-w-xs bg-white rounded-3xl px-6 py-8 flex flex-col items-center gap-4 shadow-xl animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-3xl">🔒</div>
+            <div className="text-center">
+              <p className="font-bold text-base text-gray-900">로그인이 필요해요</p>
+              <p className="text-xs text-gray-500 mt-1">찜하려면 먼저 로그인해 주세요.</p>
+            </div>
+            <button
+              onClick={() => router.push("/login")}
+              className="w-full py-3 bg-[#1A1A1A] text-white font-bold rounded-2xl text-sm active:scale-[0.98] transition-transform"
+            >
+              로그인하기
+            </button>
+            <button
+              onClick={() => setShowLoginPrompt(false)}
+              className="text-xs text-gray-400 font-medium"
+            >
+              나중에 하기
+            </button>
           </div>
         </div>
       )}

@@ -1,6 +1,50 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+
+// Safari는 currentTime 설정 후 seeked 이벤트 없이 프레임을 렌더링하지 않음.
+// canvas로 캡처해 <img>로 교체하면 모든 브라우저에서 안정적으로 썸네일 표시.
+function VideoThumbnail({ src, className }: { src: string; className?: string }) {
+  const [thumb, setThumb] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const capture = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth || 320;
+      canvas.height = video.videoHeight || 240;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const url = canvas.toDataURL("image/jpeg", 0.85);
+      if (url && url !== "data:,") setThumb(url);
+    } catch {
+      // CORS 제한 등으로 캡처 불가 → <video> 유지
+    }
+  }, []);
+
+  if (thumb) {
+    return <img src={thumb} alt="" className={className} />;
+  }
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      className={className}
+      muted
+      playsInline
+      preload="metadata"
+      crossOrigin="anonymous"
+      onLoadedMetadata={(e) => {
+        (e.target as HTMLVideoElement).currentTime = 0.001;
+      }}
+      onSeeked={capture}
+    />
+  );
+}
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronLeft,
@@ -20,12 +64,15 @@ import {
   Film,
   Download,
   Trash2,
+  MoreHorizontal,
+  Sparkles,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
 import Toast from "@/components/ui/Toast";
 import MockResultModal from "./MockResultModal";
+import ScrollTimePicker from "./ScrollTimePicker";
 import { groupService } from "@/lib/api/groupService";
 import { slotService } from "@/lib/api/slotService";
 import { chatService } from "@/lib/api/chatService";
@@ -34,7 +81,6 @@ import { renderService } from "@/lib/api/renderService";
 import { useApp } from "@/lib/context/AppContext";
 import { useAuth } from "@/lib/context/AuthContext";
 import { timeToMinutes } from "@/lib/utils/time";
-import { TIME_OPTIONS } from "@/lib/mock-data/messages";
 
 const GroupScreen = () => {
   const router = useRouter();
@@ -94,8 +140,22 @@ const GroupScreen = () => {
       slotId: number;
       body: { timeLabel?: string };
     }) => slotService.updateSlot(groupId!, slotId, body),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["group", groupId, "slots"] }),
+    onSuccess: (_, { slotId, body }) => {
+      if (body.timeLabel !== undefined) {
+        // timeLabel만 변경할 경우 캐시 직접 업데이트 (presigned URL 재발급 방지)
+        queryClient.setQueryData(["group", groupId, "slots"], (old: any) =>
+          Array.isArray(old)
+            ? old.map((s: any) =>
+                s.id === slotId ? { ...s, timeLabel: body.timeLabel } : s
+              )
+            : old
+        );
+      } else {
+        queryClient.invalidateQueries({
+          queryKey: ["group", groupId, "slots"],
+        });
+      }
+    },
   });
 
   const sendMessage = useMutation({
@@ -107,7 +167,6 @@ const GroupScreen = () => {
   // ── Local UI state ───────────────────────────────────────────────────────
   const [showInviteToast, setShowInviteToast] = useState(false);
   const [showArchiveToast, setShowArchiveToast] = useState(false);
-  const [showTimeOrderToast, setShowTimeOrderToast] = useState(false);
   const searchParams = useSearchParams();
   const [activeSubTab, setActiveSubTab] = useState(
     searchParams.get("tab") === "chat" ? "chat" : "status"
@@ -119,6 +178,9 @@ const GroupScreen = () => {
     return Number(localStorage.getItem(`chat_seen_${groupId}`) ?? 0);
   });
   const [showMockResult, setShowMockResult] = useState(false);
+  const [showAllProgress, setShowAllProgress] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingSlotId, setUploadingSlotId] = useState<number | null>(null);
   const [slotAssets, setSlotAssets] = useState<
     Record<number, { url: string; thumbnailUrl: string; isVideo: boolean }>
@@ -141,6 +203,14 @@ const GroupScreen = () => {
     isVideo: boolean;
   } | null>(null);
 
+  const [showTimePickerSlotId, setShowTimePickerSlotId] = useState<
+    number | null
+  >(null);
+  const [actionSheetSlotId, setActionSheetSlotId] = useState<number | null>(
+    null
+  );
+  const [showDuplicateTimeToast, setShowDuplicateTimeToast] = useState(false);
+  const [showUploadRequiredToast, setShowUploadRequiredToast] = useState(false);
   const [renderJobId, setRenderJobId] = useState<number | null>(null);
   const [renderStatus, setRenderStatus] = useState<string | null>(null);
   const [resultVideoUrl, setResultVideoUrl] = useState<string | null>(null);
@@ -150,6 +220,7 @@ const GroupScreen = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const pendingSlotId = useRef<number | null>(null);
 
   useEffect(() => {
@@ -200,17 +271,19 @@ const GroupScreen = () => {
   useEffect(() => {
     const projectId = selectedGroup?.projectId;
     if (!projectId) return;
-    renderService.getLatestJobByProject(projectId).then(async (job) => {
-      if (!job) return;
-      setRenderJobId(job.id);
-      setRenderStatus(job.status);
-      if (job.status === "SUCCEEDED") {
-        const url = await renderService.getDownloadUrl(job.id);
-        setResultVideoUrl(url);
-      }
-    }).catch(() => {
-      // 렌더 이력 없으면 무시
-    });
+    renderService
+      .getLatestJobByProject(projectId)
+      .then((job) => {
+        if (!job) return;
+        setRenderJobId(job.id);
+        setRenderStatus(job.status);
+        if (job.status === "SUCCEEDED" && job.resultUrl) {
+          setResultVideoUrl(job.resultUrl);
+        }
+      })
+      .catch(() => {
+        // 렌더 이력 없으면 무시
+      });
   }, [selectedGroup?.projectId]);
 
   useEffect(() => {
@@ -235,6 +308,19 @@ const GroupScreen = () => {
   if (!selectedGroup) return null;
 
   // ── Handlers ─────────────────────────────────────────────────────────────
+
+  const handleCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !groupId) return;
+    setUploadingCover(true);
+    try {
+      await groupService.uploadCoverImage(groupId, file);
+      queryClient.invalidateQueries({ queryKey: ["group", groupId] });
+    } finally {
+      setUploadingCover(false);
+      e.target.value = "";
+    }
+  };
 
   const handleInvite = () => {
     const code = group?.inviteCode;
@@ -266,24 +352,13 @@ const GroupScreen = () => {
     createSlot.mutate(newTime);
   };
 
-  const handleTimeChange = (
-    slotId: number,
-    newTime: string,
-    currentIndex: number
-  ) => {
-    const newMins = timeToMinutes(newTime);
-    let isValid = true;
-    if (currentIndex > 0) {
-      if (timeToMinutes(slots[currentIndex - 1].timeLabel) >= newMins)
-        isValid = false;
-    }
-    if (currentIndex < slots.length - 1) {
-      if (timeToMinutes(slots[currentIndex + 1].timeLabel) <= newMins)
-        isValid = false;
-    }
-    if (!isValid) {
-      setShowTimeOrderToast(true);
-      setTimeout(() => setShowTimeOrderToast(false), 2000);
+  const handleTimeChange = (slotId: number, newTime: string) => {
+    const isDuplicate = slots.some(
+      (s) => s.id !== slotId && s.timeLabel === newTime
+    );
+    if (isDuplicate) {
+      setShowDuplicateTimeToast(true);
+      setTimeout(() => setShowDuplicateTimeToast(false), 2000);
       return;
     }
     updateSlot.mutate({ slotId, body: { timeLabel: newTime } });
@@ -477,15 +552,24 @@ const GroupScreen = () => {
     totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0;
   const isAllFilled = groupProgressPercent === 100;
   const displayName = group?.name ?? selectedGroup.name;
-  const memberCount = group?.memberCount ?? members.length;
+  const memberCount = members.length > 0 ? members.length : (group?.memberCount ?? 1);
 
   return (
-    <div className="flex flex-col h-full bg-white pb-safe overflow-y-auto no-scrollbar animate-slide-left">
+    <div
+      className="flex flex-col h-full pb-safe overflow-y-auto no-scrollbar animate-slide-left"
+      style={{ background: "#FDFDFD" }}
+    >
       <StatusBar theme="dark" />
       {showInviteToast && <Toast message="초대 코드가 복사되었습니다!" />}
       {showArchiveToast && <Toast message="보관함으로 이동되었습니다!" />}
-      {showTimeOrderToast && (
-        <Toast message="시간 순서대로 맞춰 설정해주세요" type="error" />
+      {showDuplicateTimeToast && (
+        <Toast message="이미 사용 중인 시간이에요" type="error" />
+      )}
+      {showUploadRequiredToast && (
+        <Toast
+          message="모든 영상/이미지를 업로드해야 영상이 완성됩니다."
+          type="error"
+        />
       )}
       <input
         ref={fileInputRef}
@@ -500,6 +584,13 @@ const GroupScreen = () => {
         accept="video/*,image/*"
         className="hidden"
         onChange={handleReplaceFileSelect}
+      />
+      <input
+        ref={coverInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleCoverChange}
       />
       <MockResultModal
         isOpen={showMockResult}
@@ -729,6 +820,41 @@ const GroupScreen = () => {
           >
             초대
           </Button>
+          <div className="relative">
+            <button
+              onClick={() => setShowMoreMenu((v) => !v)}
+              className="p-1.5 rounded-full hover:bg-gray-100 text-gray-500"
+            >
+              <MoreHorizontal size={20} />
+            </button>
+            {showMoreMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setShowMoreMenu(false)}
+                />
+                <div
+                  className="absolute right-0 top-full mt-1 z-40 bg-white rounded-2xl overflow-hidden min-w-[160px]"
+                  style={{
+                    border: "2px solid #e5e7eb",
+                    boxShadow: "4px 4px 0 rgba(0,0,0,0.08)",
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      coverInputRef.current?.click();
+                    }}
+                    disabled={uploadingCover}
+                    className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-50"
+                  >
+                    <Camera size={16} className="text-gray-500" />
+                    {uploadingCover ? "업로드 중..." : "커버 이미지 변경"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Members */}
@@ -751,17 +877,29 @@ const GroupScreen = () => {
                       key={member.userId}
                       className="flex flex-col items-center gap-1 min-w-[50px]"
                     >
-                      {isImage ? (
-                        <img
-                          src={avatarSrc}
-                          alt={member.name}
-                          className="w-10 h-10 rounded-full object-cover ring-2 ring-white shadow-sm"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white text-xs font-bold ring-2 ring-white shadow-sm">
-                          {member.name?.[0] ?? "?"}
-                        </div>
-                      )}
+                      <div className="relative">
+                        {isImage ? (
+                          <img
+                            src={avatarSrc}
+                            alt={member.name}
+                            className="w-10 h-10 rounded-full object-cover"
+                            style={{
+                              border: "3px solid #333",
+                              boxShadow: "4px 4px 0 rgba(0,0,0,0.12)",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            className="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center text-white text-xs font-bold"
+                            style={{
+                              border: "3px solid #333",
+                              boxShadow: "4px 4px 0 rgba(0,0,0,0.12)",
+                            }}
+                          >
+                            {member.name?.[0] ?? "?"}
+                          </div>
+                        )}
+                      </div>
                       <span className="text-[10px] font-medium text-gray-600 truncate max-w-[50px]">
                         {isMe ? "나" : member.name}
                       </span>
@@ -806,18 +944,34 @@ const GroupScreen = () => {
             className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 ${
               activeSubTab === "status"
                 ? "bg-black text-white"
-                : "bg-gray-100 text-gray-500"
+                : "text-gray-500"
             }`}
+            style={
+              activeSubTab === "status"
+                ? { boxShadow: "4px 4px 0 rgba(0,0,0,0.12)" }
+                : {
+                    background: "#F8FAFC",
+                    border: "3px solid #333",
+                    boxShadow: "4px 4px 0 rgba(0,0,0,0.12)",
+                  }
+            }
           >
             <Camera size={14} /> 인증 현황
           </button>
           <button
             onClick={() => setActiveSubTab("chat")}
             className={`flex-1 py-2 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 relative ${
-              activeSubTab === "chat"
-                ? "bg-black text-white"
-                : "bg-gray-100 text-gray-500"
+              activeSubTab === "chat" ? "bg-black text-white" : "text-gray-500"
             }`}
+            style={
+              activeSubTab === "chat"
+                ? { boxShadow: "4px 4px 0 rgba(0,0,0,0.12)" }
+                : {
+                    background: "#F8FAFC",
+                    border: "3px solid #333",
+                    boxShadow: "4px 4px 0 rgba(0,0,0,0.12)",
+                  }
+            }
           >
             <MessageCircle size={14} /> 채팅
             {hasUnread && activeSubTab !== "chat" && (
@@ -830,120 +984,248 @@ const GroupScreen = () => {
       {/* Status Tab */}
       {activeSubTab === "status" ? (
         <div className="animate-fade-in pb-20">
-          <div className="mx-4 mt-4 bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex gap-3">
-            <div className="bg-white p-2 rounded-full h-fit text-indigo-600 shadow-sm">
-              <Info size={16} />
+          <div
+            className="mx-4 mt-4 rounded-2xl p-4 flex gap-3 items-center relative overflow-hidden"
+            style={{
+              background: "#F8FAFC",
+              border: "3px solid #333",
+              boxShadow: "4px 4px 0 rgba(0,0,0,0.12)",
+            }}
+          >
+            <div
+              className="shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center"
+              style={{ background: "#a3e3ed", opacity: "0.7" }}
+            >
+              <Sparkles size={22} style={{ color: "#2ab8a0" }} />
             </div>
-            <div>
-              <h3 className="font-bold text-sm text-indigo-900 mb-1">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-black text-sm text-gray-900 mb-0.5">
                 오늘의 미션
               </h3>
-              <p className="text-xs text-indigo-700 leading-relaxed">
-                오늘 정해진 시간에 3초 영상을 기록하세요! 📹
+              <p
+                className="text-xs leading-relaxed"
+                style={{ color: "#2ab8a0" }}
+              >
+                정해진 시간에 <strong>3초 영상/이미지</strong>를 넣어주세요! 📸
               </p>
             </div>
+            <Film
+              size={56}
+              className="absolute right-3 top-1/2 -translate-y-1/2 opacity-10 text-gray-400 shrink-0"
+            />
           </div>
 
           <div className="px-4 mt-4 flex gap-2">
-            {renderStatus === "SUCCEEDED" && resultVideoUrl ? (
+            {renderJobId !== null ? (
               <>
                 <button
-                  onClick={() => setShowResultModal(true)}
-                  className="flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 bg-black text-white shadow-lg transition-all active:scale-95"
+                  onClick={() =>
+                    renderStatus === "SUCCEEDED" && resultVideoUrl
+                      ? setShowResultModal(true)
+                      : undefined
+                  }
+                  disabled={renderStatus !== "SUCCEEDED" || !resultVideoUrl}
+                  className={`flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95
+                    ${
+                      renderStatus === "SUCCEEDED" && resultVideoUrl
+                        ? "bg-black text-white"
+                        : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                    }
+                  `}
+                  style={
+                    renderStatus === "SUCCEEDED" && resultVideoUrl
+                      ? { boxShadow: "4px 4px 0 rgba(0,0,0,0.12)" }
+                      : undefined
+                  }
                 >
-                  <Film size={16} /> 결과 보기
+                  {renderStatus === "QUEUED" || renderStatus === "RUNNING" ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                      렌더링 중
+                    </>
+                  ) : (
+                    <>
+                      <Film size={16} /> 결과 보기
+                    </>
+                  )}
                 </button>
                 <button
-                  onClick={handleCreateResult}
-                  className="flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 bg-gray-100 text-gray-700 transition-all active:scale-95"
+                  onClick={() => {
+                    if (!isAllFilled) {
+                      setShowUploadRequiredToast(true);
+                      setTimeout(() => setShowUploadRequiredToast(false), 2500);
+                      return;
+                    }
+                    handleCreateResult();
+                  }}
+                  className="flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-gray-700 transition-all active:scale-95"
+                  style={{
+                    background: "#F8FAFC",
+                    border: "3px solid #333",
+                    boxShadow: "4px 4px 0 rgba(0,0,0,0.12)",
+                  }}
                 >
                   <Film size={16} /> 다시 만들기
                 </button>
               </>
             ) : (
               <button
-                onClick={handleCreateResult}
-                disabled={
-                  renderStatus === "QUEUED" ||
-                  renderStatus === "RUNNING" ||
-                  !isAllFilled
-                }
-                className={`flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95
-                  ${isAllFilled ? "bg-black text-white shadow-lg" : "bg-gray-100 text-gray-400 cursor-not-allowed"}
-                  ${renderStatus === "QUEUED" || renderStatus === "RUNNING" ? "opacity-70" : ""}
-                `}
+                onClick={() => {
+                  if (!isAllFilled) {
+                    setShowUploadRequiredToast(true);
+                    setTimeout(() => setShowUploadRequiredToast(false), 2500);
+                    return;
+                  }
+                  handleCreateResult();
+                }}
+                className="flex-1 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 bg-black text-white shadow-lg transition-all active:scale-95"
               >
-                {renderStatus === "QUEUED" || renderStatus === "RUNNING" ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    렌더링 중
-                  </>
-                ) : (
-                  <>
-                    <Film size={16} /> 결과 만들기
-                  </>
-                )}
+                <Film size={16} /> 결과 만들기
               </button>
             )}
           </div>
 
-          {/* 전체 진행률 카드 */}
-          <div className="mx-4 mt-4 bg-[#1A1A1A] text-white rounded-3xl p-5 overflow-hidden relative shadow-xl shadow-gray-200">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 rounded-full -mr-10 -mt-10 blur-xl" />
-            <div className="relative z-10 flex items-center justify-between mb-3">
-              <div>
-                <div className="text-xs text-gray-400 font-medium mb-0.5">
-                  전체 진행률
-                </div>
-                <div className="text-3xl font-mono font-bold text-yellow-400 tracking-tighter">
-                  {groupProgressPercent}%
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-gray-400 font-medium mb-0.5">
-                  업로드
-                </div>
-                <div className="text-sm font-bold text-gray-200">
-                  {filledCells}{" "}
-                  <span className="text-gray-500 font-normal">
-                    / {totalCells}
-                  </span>
-                </div>
-              </div>
-            </div>
-            {/* 프로그레스 바 */}
-            <div className="relative z-10 h-2 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${groupProgressPercent}%`,
-                  background: isAllFilled
-                    ? "linear-gradient(90deg, #6366f1, #a855f7)"
-                    : "linear-gradient(90deg, #facc15, #f97316)",
-                }}
-              />
-            </div>
-            {isAllFilled && (
-              <div className="relative z-10 mt-4 flex flex-col items-center gap-3">
-                <div className="flex items-center gap-1.5 text-xs text-indigo-300 font-medium">
-                  <Check size={12} strokeWidth={3} /> 모든 멤버의 기록이
-                  완성됐어요!
-                </div>
-                <button
-                  onClick={() => {
-                    setShowArchiveToast(true);
-                    setTimeout(() => {
-                      setShowArchiveToast(false);
-                      setSelectedGroup(null);
-                    }, 1500);
-                  }}
-                  className="w-full py-2.5 bg-white/10 hover:bg-white/15 text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-colors"
-                >
-                  <FolderClock size={14} /> 보관함으로 옮기기
-                </button>
-              </div>
-            )}
+          {/* 레이아웃 미리보기 */}
+          <div className="px-4 mt-2 flex justify-center">
+            <button
+              onClick={() => setShowMockResult(true)}
+              className="text-xs text-gray-400 underline underline-offset-2 active:text-gray-600"
+            >
+              결과물 레이아웃 미리보기
+            </button>
           </div>
+
+          {/* 멤버별 진행률 */}
+          <div className="mx-4 mt-4">
+            <p className="text-xs font-bold text-gray-400 mb-2 px-1">진행률</p>
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                background: "#F8FAFC",
+                boxShadow: "4px 4px 0 rgba(0,0,0,0.12)",
+                border: "3px solid #333",
+              }}
+            >
+              {[...members]
+                .sort((a, b) =>
+                  a.userId === userProfile?.id
+                    ? -1
+                    : b.userId === userProfile?.id
+                    ? 1
+                    : 0
+                )
+                .slice(0, showAllProgress ? undefined : 3)
+                .map((member) => {
+                  const totalSlots = progress?.slots?.length ?? 0;
+                  const uploaded = progress?.matrix
+                    ? Object.values(progress.matrix).filter(
+                        (slotMap) =>
+                          slotMap[String(member.userId)] === "UPLOADED"
+                      ).length
+                    : 0;
+                  const percent =
+                    totalSlots > 0 ? (uploaded / totalSlots) * 100 : 0;
+                  const isMe = member.userId === userProfile?.id;
+                  return (
+                    <div
+                      key={member.userId}
+                      className="flex items-center gap-3 px-3 py-2.5"
+                    >
+                      {/* 왼쪽: 프로필 + 이름 */}
+                      <div className="flex flex-col items-center gap-0.5 w-8 flex-shrink-0">
+                        {(() => {
+                          const avatarSrc = isMe
+                            ? userProfile?.avatar
+                            : member.avatarUrl;
+                          return avatarSrc ? (
+                            <img
+                              src={avatarSrc}
+                              alt={member.name}
+                              className="w-8 h-8 rounded-lg object-cover"
+                              style={{ border: "2px solid #333" }}
+                            />
+                          ) : (
+                            <div
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-black"
+                              style={{
+                                background: "#888",
+                                border: "2px solid #333",
+                              }}
+                            >
+                              {(isMe ? userProfile?.name : member.name)?.[0] ??
+                                "?"}
+                            </div>
+                          );
+                        })()}
+                        <span className="text-[9px] font-bold text-gray-500 truncate w-full text-center">
+                          {isMe
+                            ? "나"
+                            : member.name?.length > 4
+                            ? member.name.slice(0, 4) + "…"
+                            : member.name}
+                        </span>
+                      </div>
+                      {/* 오른쪽: 하트 + 바 + 카운터 */}
+                      <div className="flex-1 flex items-center gap-1.5">
+                        {/* 체력바 */}
+                        <div className="relative flex-1 h-3 bg-white border-2 border-black rounded-full overflow-hidden">
+                          <div className="absolute inset-0 flex">
+                            {Array.from({ length: totalSlots }).map((_, i) => (
+                              <div
+                                key={i}
+                                className="flex-1 border-r border-black/10 last:border-0"
+                              />
+                            ))}
+                          </div>
+                          <div
+                            className="h-full transition-all duration-500 ease-out"
+                            style={{
+                              width: `${percent}%`,
+                              background: isMe ? "#25a6c2" : "#7ccdd9",
+                            }}
+                          >
+                            <div className="w-full h-1/2 bg-white/30" />
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-black text-gray-400 flex-shrink-0">
+                          {uploaded}
+                          <span className="font-medium">/{totalSlots}</span>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              {members.length > 3 && !showAllProgress && (
+                <button
+                  onClick={() => setShowAllProgress(true)}
+                  className="w-full py-2.5 text-xs font-bold text-gray-400 flex items-center justify-center gap-1 border-t border-gray-100 active:bg-gray-50"
+                >
+                  나머지 {members.length - 3}명 더보기
+                </button>
+              )}
+            </div>
+          </div>
+
+          {isAllFilled && (
+            <div className="mx-4 mt-3 flex flex-col items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
+                <Check size={12} strokeWidth={3} /> 모든 멤버의 기록이
+                완성됐어요!
+              </div>
+              <button
+                onClick={() => {
+                  setShowArchiveToast(true);
+                  setTimeout(() => {
+                    setShowArchiveToast(false);
+                    setSelectedGroup(null);
+                  }, 1500);
+                }}
+                className="w-full py-2.5 bg-gray-100 text-gray-700 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"
+              >
+                <FolderClock size={14} /> 보관함으로 옮기기
+              </button>
+            </div>
+          )}
 
           {/* Slots */}
           <div className="p-4 grid grid-cols-2 gap-3">
@@ -956,12 +1238,21 @@ const GroupScreen = () => {
                       className="h-36 bg-gray-100 rounded-2xl animate-pulse"
                     />
                   ))
-              : slots.map((slot, idx) => {
+              : slots.map((slot) => {
                   const uploaded = slotAssets[slot.id];
                   const isFilled = !!uploaded;
                   return (
-                    <div key={slot.id} className="flex flex-col gap-1.5">
-                      <div className="border border-gray-200 rounded-2xl flex flex-col justify-between h-36 relative overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
+                    <div key={slot.id} className="flex flex-col gap-2">
+                      {/* Card */}
+                      <div
+                        className="relative rounded-3xl overflow-hidden"
+                        style={{
+                          height: "144px",
+                          border: "3px solid #333",
+                          boxShadow: "4px 4px 0 rgba(0,0,0,0.12)",
+                          background: isFilled ? undefined : "#F8FAFC",
+                        }}
+                      >
                         {/* 썸네일 */}
                         {uploaded && (
                           <div
@@ -970,17 +1261,9 @@ const GroupScreen = () => {
                           >
                             {uploaded.isVideo &&
                             !uploaded.thumbnailUrl.startsWith("data:") ? (
-                              <video
+                              <VideoThumbnail
                                 src={uploaded.url}
                                 className="w-full h-full object-cover pointer-events-none"
-                                muted
-                                playsInline
-                                preload="metadata"
-                                onLoadedMetadata={(e) => {
-                                  (
-                                    e.target as HTMLVideoElement
-                                  ).currentTime = 0.5;
-                                }}
                               />
                             ) : (
                               <img
@@ -989,76 +1272,47 @@ const GroupScreen = () => {
                                 className="w-full h-full object-cover"
                               />
                             )}
-                            <div className="absolute inset-0 bg-black/20" />
-                            {uploaded.isVideo && (
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="w-10 h-10 rounded-full bg-white/80 flex items-center justify-center shadow-lg">
-                                  <Play
-                                    size={18}
-                                    className="text-gray-900 ml-0.5"
-                                    fill="currentColor"
-                                  />
-                                </div>
-                              </div>
-                            )}
+                            <div className="absolute inset-0 bg-black/10" />
                           </div>
                         )}
 
-                        {/* 교체 / 삭제 버튼 (채워진 슬롯) */}
-                        {uploaded && (
-                          <div className="absolute bottom-2 right-2 z-20 flex gap-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                pendingSlotId.current = slot.id;
-                                replaceInputRef.current?.click();
-                              }}
-                              disabled={uploadingSlotId !== null}
-                              className="w-7 h-7 rounded-full bg-black/60 flex items-center justify-center disabled:opacity-50"
-                            >
-                              <Camera size={13} className="text-white" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPendingConfirm({
-                                  type: "deleteUpload",
-                                  slotId: slot.id,
-                                });
-                              }}
-                              disabled={uploadingSlotId !== null}
-                              className="w-7 h-7 rounded-full bg-red-500/80 flex items-center justify-center disabled:opacity-50"
-                            >
-                              <Trash2 size={11} className="text-white" />
-                            </button>
-                          </div>
-                        )}
-
-                        <div className="flex justify-between items-start z-10 p-3">
-                          <select
-                            value={slot.timeLabel}
-                            onChange={(e) =>
-                              handleTimeChange(slot.id, e.target.value, idx)
-                            }
-                            className="text-[10px] font-bold bg-gray-100 px-2 py-1 rounded-md text-gray-500 font-mono tracking-tight text-center focus:ring-2 focus:ring-blue-500 outline-none transition-all border border-transparent focus:bg-white cursor-pointer"
-                            style={{ backdropFilter: "blur(4px)" }}
+                        {/* 상단 바 — 시간 레이블 + 더보기/삭제 */}
+                        <div className="absolute top-0 left-0 right-0 flex justify-between items-center p-3 z-10">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowTimePickerSlotId(slot.id);
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold font-mono tracking-tight transition-all active:scale-95"
+                            style={{
+                              background: isFilled
+                                ? "rgba(0,0,0,0.40)"
+                                : "rgba(0,0,0,0.07)",
+                              color: isFilled ? "#fff" : "#666",
+                              backdropFilter: "blur(4px)",
+                            }}
                           >
-                            {TIME_OPTIONS.map((time) => (
-                              <option key={time} value={time}>
-                                {time}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="flex items-center gap-1">
-                            {isFilled && (
-                              <div className="bg-green-100 p-1 rounded-full">
-                                <Check
-                                  size={10}
-                                  className="text-green-600"
-                                  strokeWidth={3}
-                                />
-                              </div>
-                            )}
+                            <Clock size={10} />
+                            {slot.timeLabel}
+                          </button>
+                          {isFilled ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActionSheetSlotId(slot.id);
+                              }}
+                              className="w-7 h-7 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+                              style={{
+                                background: "rgba(0,0,0,0.35)",
+                                backdropFilter: "blur(4px)",
+                              }}
+                            >
+                              <MoreHorizontal
+                                size={14}
+                                className="text-white"
+                              />
+                            </button>
+                          ) : (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1067,42 +1321,66 @@ const GroupScreen = () => {
                                   slotId: slot.id,
                                 });
                               }}
-                              className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors
-                              ${
-                                isFilled
-                                  ? "bg-white/20 text-white"
-                                  : "bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-500"
-                              }`}
+                              className="w-7 h-7 rounded-full bg-black/5 flex items-center justify-center text-gray-400 active:bg-red-100 active:text-red-500 transition-colors"
                             >
-                              <X size={10} />
+                              <X size={12} />
                             </button>
-                          </div>
+                          )}
                         </div>
 
-                        {!isFilled && (
-                          <div className="flex flex-col items-center justify-center flex-1 z-10">
-                            <button
-                              onClick={() => handleSlotClick(slot.id)}
-                              disabled={uploadingSlotId !== null}
-                              className="w-10 h-10 rounded-full bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 mb-2 hover:bg-black hover:text-white hover:border-black transition-all group disabled:opacity-50"
-                            >
-                              {uploadingSlotId === slot.id ? (
-                                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                              ) : (
-                                <Camera
-                                  size={18}
-                                  className="group-hover:scale-110 transition-transform"
+                        {/* 중앙 — 플레이 버튼(채워진) or 카메라(빈) */}
+                        {uploaded ? (
+                          uploaded.isVideo && (
+                            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+                              <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center shadow-lg">
+                                <Play
+                                  size={22}
+                                  className="text-gray-800 ml-1"
+                                  fill="currentColor"
                                 />
-                              )}
-                            </button>
-                          </div>
+                              </div>
+                            </div>
+                          )
+                        ) : (
+                          <button
+                            onClick={() => handleSlotClick(slot.id)}
+                            disabled={uploadingSlotId !== null}
+                            className="absolute inset-0 flex items-center justify-center disabled:opacity-50"
+                          >
+                            {uploadingSlotId === slot.id ? (
+                              <div className="w-6 h-6 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <div
+                                className="w-14 h-14 rounded-full border-2 border-dashed flex items-center justify-center"
+                                style={{ borderColor: "#333" }}
+                              >
+                                <Camera size={22} style={{ color: "#333" }} />
+                              </div>
+                            )}
+                          </button>
+                        )}
+
+                        {/* 우하단 — 교체 버튼 (채워진 슬롯) */}
+                        {uploaded && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              pendingSlotId.current = slot.id;
+                              replaceInputRef.current?.click();
+                            }}
+                            disabled={uploadingSlotId !== null}
+                            className="absolute bottom-3 right-3 z-20 w-9 h-9 rounded-full flex items-center justify-center disabled:opacity-50 active:scale-90 transition-transform"
+                            style={{
+                              background: "rgba(0,0,0,0.45)",
+                              backdropFilter: "blur(4px)",
+                            }}
+                          >
+                            <Camera size={15} className="text-white" />
+                          </button>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl bg-gray-50 border border-transparent focus-within:border-gray-200 focus-within:bg-white transition-all group">
-                        <Pencil
-                          size={10}
-                          className="text-gray-300 group-focus-within:text-gray-400 shrink-0 transition-colors"
-                        />
+                      <div className="flex items-center gap-1.5 px-1">
+                        <Pencil size={10} className="text-gray-300 shrink-0" />
                         <input
                           value={slotCaptions[slot.id] ?? ""}
                           onChange={(e) =>
@@ -1123,11 +1401,9 @@ const GroupScreen = () => {
                           maxLength={100}
                           className="flex-1 min-w-0 text-[11px] text-gray-600 bg-transparent outline-none placeholder-gray-300"
                         />
-                        {slotCaptions[slot.id] && (
-                          <span className="text-[9px] text-gray-300 shrink-0 font-mono tabular-nums">
-                            {slotCaptions[slot.id].length}/100
-                          </span>
-                        )}
+                        <span className="text-[10px] text-gray-300 shrink-0 font-mono tabular-nums">
+                          {(slotCaptions[slot.id] ?? "").length}/100
+                        </span>
                       </div>
                     </div>
                   );
@@ -1135,7 +1411,7 @@ const GroupScreen = () => {
             <button
               onClick={handleAddSlot}
               disabled={createSlot.isPending}
-              className="border-2 border-dashed border-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center h-36 text-gray-400 hover:bg-gray-50 hover:text-gray-600 hover:border-gray-300 transition-all active:scale-95 group disabled:opacity-50"
+              className="border-2 border-dashed border-gray-200 rounded-3xl p-4 flex flex-col items-center justify-center h-36 text-gray-400 hover:bg-gray-50 hover:text-gray-600 hover:border-gray-300 transition-all active:scale-95 group disabled:opacity-50"
             >
               <div className="w-10 h-10 rounded-full bg-gray-50 group-hover:bg-white border border-transparent group-hover:border-gray-200 flex items-center justify-center mb-2 transition-all">
                 {createSlot.isPending ? (
@@ -1161,6 +1437,12 @@ const GroupScreen = () => {
                 "ko-KR",
                 { hour: "2-digit", minute: "2-digit", hour12: false }
               );
+              const sender = members.find((m) => m.userId === msg.userId);
+              const avatarUrl = isMine
+                ? userProfile?.avatar
+                : sender?.avatarUrl;
+              const initials = (msg.userName ?? "?")[0].toUpperCase();
+
               if (msg.isSystem) {
                 return (
                   <div key={msg.id} className="flex justify-center my-3">
@@ -1173,33 +1455,56 @@ const GroupScreen = () => {
               return (
                 <div
                   key={msg.id}
-                  className={`flex flex-col ${
-                    isMine ? "items-end" : "items-start"
-                  }`}
+                  className={`flex ${isMine ? "justify-end" : "justify-start"}`}
                 >
+                  {/* 상대방 아바타 */}
                   {!isMine && (
-                    <span className="text-[10px] text-gray-500 ml-1 mb-1">
-                      {msg.userName}
-                    </span>
+                    <div className="flex flex-col items-center mr-2 mt-0.5 shrink-0">
+                      {avatarUrl &&
+                      (avatarUrl.startsWith("http") ||
+                        avatarUrl.startsWith("data:")) ? (
+                        <img
+                          src={avatarUrl}
+                          alt={msg.userName}
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold text-white">
+                          {initials}
+                        </div>
+                      )}
+                    </div>
                   )}
+
                   <div
-                    className={`flex items-end gap-1.5 ${
-                      isMine ? "flex-row-reverse" : "flex-row"
-                    }`}
+                    className={`flex flex-col ${
+                      isMine ? "items-end" : "items-start"
+                    } max-w-[70vw]`}
                   >
+                    {!isMine && (
+                      <span className="text-[10px] text-gray-500 ml-0.5 mb-1">
+                        {msg.userName}
+                      </span>
+                    )}
                     <div
-                      className={`max-w-[70vw] px-3.5 py-2.5 text-sm leading-snug shadow-sm
-                      ${
-                        isMine
-                          ? "bg-[#1A1A1A] text-white rounded-2xl rounded-br-sm"
-                          : "bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-bl-sm"
+                      className={`flex items-end gap-1.5 ${
+                        isMine ? "flex-row-reverse" : "flex-row"
                       }`}
                     >
-                      {msg.body}
+                      <div
+                        className={`px-3.5 py-2.5 text-sm leading-snug shadow-sm
+                        ${
+                          isMine
+                            ? "bg-[#1A1A1A] text-white rounded-2xl rounded-br-sm"
+                            : "bg-white border border-gray-100 text-gray-800 rounded-2xl rounded-bl-sm"
+                        }`}
+                      >
+                        {msg.body}
+                      </div>
+                      <span className="text-[10px] text-gray-400 shrink-0 pb-0.5">
+                        {timeStr}
+                      </span>
                     </div>
-                    <span className="text-[10px] text-gray-400 shrink-0 pb-0.5">
-                      {timeStr}
-                    </span>
                   </div>
                 </div>
               );
@@ -1215,12 +1520,18 @@ const GroupScreen = () => {
               type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
-              onCompositionStart={() => { isComposingRef.current = true; }}
+              onCompositionStart={() => {
+                isComposingRef.current = true;
+              }}
               onCompositionEnd={(e) => {
                 isComposingRef.current = false;
                 setChatInput((e.target as HTMLInputElement).value);
               }}
-              onKeyDown={(e) => e.key === "Enter" && !isComposingRef.current && handleSendMessage()}
+              onKeyDown={(e) =>
+                e.key === "Enter" &&
+                !isComposingRef.current &&
+                handleSendMessage()
+              }
               placeholder="메시지를 입력하세요..."
               className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black/5"
             />
@@ -1238,6 +1549,61 @@ const GroupScreen = () => {
           </div>
         </div>
       )}
+
+      {actionSheetSlotId !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-8"
+          onClick={() => setActionSheetSlotId(null)}
+        >
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative w-full max-w-xs bg-white rounded-3xl overflow-hidden animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                const id = actionSheetSlotId;
+                setActionSheetSlotId(null);
+                setPendingConfirm({ type: "deleteUpload", slotId: id });
+              }}
+              className="w-full py-4 text-center text-red-500 font-semibold text-base active:bg-gray-50 transition-colors"
+            >
+              영상만 삭제
+            </button>
+            <div className="h-px bg-gray-100" />
+            <button
+              onClick={() => {
+                const id = actionSheetSlotId;
+                setActionSheetSlotId(null);
+                setPendingConfirm({ type: "deleteSlot", slotId: id });
+              }}
+              className="w-full py-4 text-center text-red-500 font-semibold text-base active:bg-gray-50 transition-colors"
+            >
+              타임 슬롯 삭제
+            </button>
+            <div className="h-px bg-gray-100" />
+            <button
+              onClick={() => setActionSheetSlotId(null)}
+              className="w-full py-4 text-center text-gray-500 font-semibold text-base active:bg-gray-50 transition-colors"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showTimePickerSlotId !== null &&
+        (() => {
+          const slot = slots.find((s) => s.id === showTimePickerSlotId);
+          if (!slot) return null;
+          return (
+            <ScrollTimePicker
+              value={slot.timeLabel}
+              onChange={(newTime) => handleTimeChange(slot.id, newTime)}
+              onClose={() => setShowTimePickerSlotId(null)}
+            />
+          );
+        })()}
     </div>
   );
 };

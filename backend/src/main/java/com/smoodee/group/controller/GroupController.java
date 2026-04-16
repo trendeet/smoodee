@@ -7,6 +7,7 @@ import com.smoodee.group.dto.GroupMemberResponse;
 import com.smoodee.group.dto.GroupResponse;
 import com.smoodee.group.dto.JoinGroupRequest;
 import com.smoodee.group.service.GroupService;
+import com.smoodee.storage.service.StorageService;
 import com.smoodee.user.domain.User;
 import com.smoodee.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,7 +24,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "Group", description = "그룹(DayShare) API")
 @RestController
@@ -33,6 +36,7 @@ public class GroupController {
 
   private final GroupService groupService;
   private final UserService userService;
+  private final StorageService storageService;
 
   @Operation(summary = "그룹 생성")
   @PostMapping
@@ -41,9 +45,9 @@ public class GroupController {
       @Valid @RequestBody CreateGroupRequest request) {
     return ResponseEntity.ok(
         ApiResponse.of(
-            GroupResponse.from(
+            GroupResponse.from(storageService,
                 groupService.createGroup(
-                    principal.getUserId(), request.getName(), request.getMemberCount()))));
+                    principal.getUserId(), request.getName()))));
   }
 
   @Operation(summary = "초대코드로 그룹 참여")
@@ -53,7 +57,7 @@ public class GroupController {
       @Valid @RequestBody JoinGroupRequest request) {
     return ResponseEntity.ok(
         ApiResponse.of(
-            GroupResponse.from(
+            GroupResponse.from(storageService,
                 groupService.joinGroup(principal.getUserId(), request.getInviteCode()))));
   }
 
@@ -63,7 +67,7 @@ public class GroupController {
       @AuthenticationPrincipal CustomUserDetails principal,
       @PathVariable String inviteCode) {
     return ResponseEntity.ok(
-        ApiResponse.of(GroupResponse.from(groupService.getGroupByInviteCode(inviteCode))));
+        ApiResponse.of(GroupResponse.from(storageService,groupService.getGroupByInviteCode(inviteCode))));
   }
 
   @Operation(summary = "그룹 상세 조회")
@@ -71,7 +75,17 @@ public class GroupController {
   public ResponseEntity<ApiResponse<GroupResponse>> getGroup(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long groupId) {
     groupService.requireMember(groupId, principal.getUserId());
-    return ResponseEntity.ok(ApiResponse.of(GroupResponse.from(groupService.getGroup(groupId))));
+    return ResponseEntity.ok(ApiResponse.of(GroupResponse.from(storageService,groupService.getGroup(groupId))));
+  }
+
+  @Operation(summary = "그룹 커버 이미지 업로드")
+  @PostMapping("/{groupId}/cover")
+  public ResponseEntity<ApiResponse<String>> uploadCoverImage(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable Long groupId,
+      @RequestParam("file") MultipartFile file) {
+    String url = groupService.uploadCoverImage(groupId, principal.getUserId(), file);
+    return ResponseEntity.ok(ApiResponse.of(url));
   }
 
   @Operation(summary = "그룹 나가기")

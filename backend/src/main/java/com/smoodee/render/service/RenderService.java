@@ -149,7 +149,6 @@ public class RenderService {
 
   public String getDownloadUrl(Long jobId, Long userId) {
     RenderJob job = getRenderJob(jobId);
-    projectService.getProjectWithOwnerCheck(job.getProjectId(), userId);
 
     if (job.getStatus() != RenderJobStatus.SUCCEEDED) {
       throw new BusinessException(ErrorCode.RENDER_NOT_SUCCEEDED);
@@ -159,7 +158,6 @@ public class RenderService {
 
   @Transactional(readOnly = true)
   public RenderJob getLatestJobByProject(Long projectId, Long userId) {
-    if (userId != null) projectService.getProjectWithOwnerCheck(projectId, userId);
     return renderJobRepository
         .findTopByProjectIdOrderByCreatedAtDesc(projectId)
         .orElseThrow(() -> new NotFoundException(ErrorCode.RENDER_JOB_NOT_FOUND));

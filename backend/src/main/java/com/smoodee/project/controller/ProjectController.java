@@ -8,7 +8,9 @@ import com.smoodee.personal.service.ColorworkService;
 import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.dto.ProjectResponse;
 import com.smoodee.project.service.ProjectService;
+import com.smoodee.storage.service.StorageService;
 import com.smoodee.template.domain.TemplateType;
+import java.time.Duration;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.extern.slf4j.Slf4j;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,6 +39,7 @@ public class ProjectController {
   private final ColorworkService colorworkService;
   private final GroupRepository groupRepository;
   private final GroupMemberRepository groupMemberRepository;
+  private final StorageService storageService;
 
   @Operation(
       summary = "프로젝트 목록 조회",
@@ -70,8 +73,11 @@ public class ProjectController {
                                 group -> {
                                   int memberCount =
                                       groupMemberRepository.countByGroupId(group.getId());
+                                  String coverUrl = group.getCoverImageS3Key() != null
+                                      ? storageService.presignGet(group.getCoverImageS3Key(), Duration.ofDays(7))
+                                      : null;
                                   return ProjectResponse.from(
-                                      project, group.getId(), group.getName(), memberCount);
+                                      project, group.getId(), group.getName(), memberCount, coverUrl);
                                 })
                             .orElseGet(() -> ProjectResponse.from(project));
                       }
@@ -102,8 +108,11 @@ public class ProjectController {
                               group -> {
                                 int memberCount =
                                     groupMemberRepository.countByGroupId(group.getId());
+                                String coverUrl = group.getCoverImageS3Key() != null
+                                    ? storageService.presignGet(group.getCoverImageS3Key(), Duration.ofDays(7))
+                                    : null;
                                 return ProjectResponse.from(
-                                    project, group.getId(), group.getName(), memberCount);
+                                    project, group.getId(), group.getName(), memberCount, coverUrl);
                               })
                           .orElseGet(() -> ProjectResponse.from(project));
                     }

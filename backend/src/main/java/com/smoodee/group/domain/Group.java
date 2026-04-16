@@ -24,17 +24,24 @@ public class Group extends BaseTimeEntity {
   @Column(nullable = false, length = 100)
   private String name;
 
-  @Column(nullable = false)
-  private int memberCount;
+  @Column(nullable = false, columnDefinition = "int default 8")
+  private int memberCount = 8;
 
   @Column(nullable = false, unique = true, length = 20)
   private String inviteCode;
 
+  @Column(nullable = true, length = 500)
+  private String coverImageS3Key;
+
   @Builder
-  public Group(Long projectId, String name, int memberCount, String inviteCode) {
+  public Group(Long projectId, String name, String inviteCode) {
     this.projectId = projectId;
     this.name = name;
-    this.memberCount = memberCount;
+    this.memberCount = 8;
     this.inviteCode = inviteCode;
+  }
+
+  public void updateCoverImage(String s3Key) {
+    this.coverImageS3Key = s3Key;
   }
 }

@@ -11,6 +11,7 @@
 @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes slide-right { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @keyframes slide-left { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes slide-down { from { transform: translateY(-100%); } to { transform: translateY(0); } }
 
 @keyframes drawer-slide {
    from { width: 0; }
@@ -25,6 +26,7 @@
 .animate-slide-up { animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 .animate-slide-right { animation: slide-right 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 .animate-slide-left { animation: slide-left 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-slide-down { animation: slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 .animate-drawer-slide { animation: drawer-slide 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 .animate-gradient { animation: gradient 3s ease infinite; background-size: 200% 200%; }
 .animate-music-bar { animation: music-bar 0.5s ease-in-out infinite; }

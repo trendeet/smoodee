@@ -99,7 +99,6 @@ export interface FrameBindRequest {
 // Group
 export interface CreateGroupRequest {
   name: string;
-  memberCount: number;
 }
 
 export interface JoinGroupRequest {
@@ -114,6 +113,7 @@ export interface GroupResponse {
   currentMemberCount: number;
   status: string; // "WAITING" | "ACTIVE" | "COMPLETED"
   projectId?: number;
+  coverImageUrl?: string;
 }
 
 export interface GroupMemberResponse {

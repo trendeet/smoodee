@@ -49,4 +49,15 @@ export const groupService = {
     const { data } = await apiClient.get(`/api/v1/groups/${groupId}/preview`);
     return data;
   },
+
+  async uploadCoverImage(groupId: number, file: File): Promise<string> {
+    const form = new FormData();
+    form.append("file", file);
+    const { data } = await apiClient.post<ApiResponse<string>>(
+      `/api/v1/groups/${groupId}/cover`,
+      form,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return data.data;
+  },
 };

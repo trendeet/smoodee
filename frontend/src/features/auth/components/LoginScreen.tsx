@@ -8,8 +8,13 @@ import StatusBar from "@/components/ui/StatusBar";
 const LoginScreen = () => {
   const router = useRouter();
 
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+
+  const handleKakaoLogin = () => {
+    window.location.href = `${base}/oauth2/authorization/kakao`;
+  };
+
   const handleGoogleLogin = () => {
-    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
     window.location.href = `${base}/oauth2/authorization/google`;
   };
 
@@ -35,17 +40,17 @@ const LoginScreen = () => {
       </div>
 
       <div className="flex-1 px-6 flex flex-col gap-3 justify-center pb-10">
-        {/* Kakao — 준비 중 */}
+        {/* Kakao */}
         <button
-          disabled
-          className="w-full relative flex items-center justify-center bg-[#FEE500]/50 text-[#000000]/40 rounded-2xl py-4 text-sm font-bold cursor-not-allowed"
+          onClick={handleKakaoLogin}
+          className="w-full relative flex items-center justify-center bg-[#FEE500] text-[#000000] rounded-2xl py-4 text-sm font-bold transition-transform active:scale-[0.98] shadow-sm"
         >
           <div className="absolute left-5 w-6 h-6 flex items-center justify-center">
-            <svg viewBox="0 0 32 32" fill="currentColor" className="w-full h-full opacity-40">
+            <svg viewBox="0 0 32 32" fill="currentColor" className="w-full h-full">
               <path d="M16 4.64c-6.96 0-12.64 4.48-12.64 10.08 0 3.52 2.32 6.64 5.76 8.48l-1.44 5.44c-.16.56.48 1.04.96.72l6.32-4.24c.32 0 .72.08 1.04.08 6.96 0 12.64-4.48 12.64-10.08S22.96 4.64 16 4.64z" />
             </svg>
           </div>
-          카카오로 로그인 (준비 중)
+          카카오로 로그인
         </button>
 
         {/* Naver — 준비 중 */}
