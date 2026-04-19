@@ -1,26 +1,29 @@
 import React from "react";
 import { Heart, Film } from "lucide-react";
-import { Template } from "@/lib/mock-data/templates";
+import { TemplateResponse } from "@/lib/api/types";
 
 interface TemplateCardProps {
-  template: Template;
+  template: TemplateResponse;
   onClick: () => void;
   isScrapped?: boolean;
-  onScrap?: (id: string) => void;
+  onScrap?: (type: string) => void;
 }
 
+const images = [
+  "1542051841857-5f90071e7989",
+  "1546069901-ba9599a7e63c",
+  "1515886657613-9f3515b0c78f",
+  "1555529733-0e670560f7e1",
+  "1469334031218-e382a71b716b",
+  "1570176527506-69a478c575a7",
+  "1545893835-aba7a139478e",
+  "1516975080664-ed2fc6a32937",
+  "1592924357228-91a4daadcfea",
+];
+
 const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCardProps) => {
-  const images = [
-    "1542051841857-5f90071e7989",
-    "1546069901-ba9599a7e63c",
-    "1515886657613-9f3515b0c78f",
-    "1555529733-0e670560f7e1",
-    "1469334031218-e382a71b716b",
-    "1570176527506-69a478c575a7",
-    "1545893835-aba7a139478e",
-    "1516975080664-ed2fc6a32937",
-    "1592924357228-91a4daadcfea",
-  ];
+  const isColorwork = t.type === "COLORWORK";
+  const isDayShare = t.type === "DAYSHARE";
 
   return (
     <div
@@ -28,28 +31,15 @@ const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCar
       className="group cursor-pointer space-y-3 active:opacity-80 transition-opacity relative text-left"
     >
       <div
-        className={`aspect-[4/5] bg-gradient-to-br ${t.thumbGradient} rounded-3xl relative overflow-hidden shadow-sm ring-1 ring-black/5`}
+        className={`aspect-[4/5] ${isColorwork ? "bg-gradient-to-br from-red-500 via-red-600 to-red-700" : isDayShare ? "bg-gradient-to-br from-blue-400 to-cyan-300" : "bg-gradient-to-br from-gray-400 to-gray-600"} rounded-3xl relative overflow-hidden`}
+        style={{ boxShadow: "6px 6px 0 rgba(0,0,0,0.12)", border: "2px solid #333" }}
       >
-        {t.id === "t1" ? (
+        {isColorwork ? (
           <>
-            <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 gap-0.5 opacity-80">
-              {images.map((img, i) => (
-                <div
-                  key={i}
-                  className={`bg-gray-300 bg-[url('https://images.unsplash.com/photo-${img}?w=200')] bg-cover bg-center`}
-                />
-              ))}
-            </div>
-            <div className="absolute inset-0 bg-red-600 mix-blend-multiply opacity-60" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-4 text-center z-10">
-              <span className="font-black text-3xl tracking-tighter drop-shadow-xl">
-                COLOR
-                <br />
-                Grab
-              </span>
-            </div>
+            <img src="/images/cw_thumbnail.png" alt="컬러워크" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/10" />
           </>
-        ) : t.id === "t_day" ? (
+        ) : isDayShare ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-4 text-center">
             <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-2">
               <Film size={24} />
@@ -80,17 +70,17 @@ const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCar
           </>
         )}
 
-        {(onScrap || isScrapped) && (
+        {(onScrap !== undefined || isScrapped) && (
           <div
             className="absolute top-2 right-2 z-20"
             onClick={(e) => {
               e.stopPropagation();
-              if (onScrap) onScrap(t.id);
+              if (onScrap) onScrap(t.type);
             }}
           >
             <div
-              className={`backdrop-blur-md p-1.5 rounded-full text-white transition-colors ${
-                onScrap ? "bg-black/20 hover:bg-black/40" : "bg-black/40"
+              className={`backdrop-blur-md p-1.5 rounded-full transition-colors ${
+                onScrap ? "bg-white/30 hover:bg-white/50" : "bg-white/40"
               }`}
             >
               <Heart
@@ -107,14 +97,7 @@ const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCar
           {t.title}
         </h3>
         <div className="flex items-center gap-2 text-xs text-gray-500">
-          <div className="flex items-center gap-1">
-            <div className="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[8px] font-bold text-gray-500">
-              {t.author[0]}
-            </div>
-            <span className="font-medium">{t.author}</span>
-          </div>
-          <span>•</span>
-          <span>{t.time}</span>
+          <span className="font-medium">{t.description ?? t.type}</span>
         </div>
       </div>
     </div>

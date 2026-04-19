@@ -1,53 +1,30 @@
 "use client";
 
 import React, { createContext, useState, useContext, ReactNode } from "react";
-import { Group, INITIAL_GROUPS } from "@/lib/mock-data/groups";
-import { InProgressSession, INITIAL_IN_PROGRESS } from "@/lib/mock-data/sessions";
+
+interface SelectedGroup {
+  id: number;
+  projectId?: number;
+  name: string;
+  inviteCode?: string;
+  memberCount?: number;
+  currentMemberCount?: number;
+  status?: string;
+  source?: "home" | "inprogress";
+}
 
 interface AppContextType {
-  groups: Group[];
-  inProgressSessions: InProgressSession[];
-  setGroups: (groups: Group[]) => void;
-  setInProgressSessions: (sessions: InProgressSession[]) => void;
-  addGroup: (group: Group) => void;
-  saveSession: (session: InProgressSession) => void;
+  selectedGroup: SelectedGroup | null;
+  setSelectedGroup: (group: SelectedGroup | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [groups, setGroups] = useState<Group[]>(INITIAL_GROUPS);
-  const [inProgressSessions, setInProgressSessions] = useState<InProgressSession[]>(
-    INITIAL_IN_PROGRESS
-  );
-
-  const addGroup = (group: Group) => {
-    setGroups((prev) => [group, ...prev]);
-  };
-
-  const saveSession = (sessionData: InProgressSession) => {
-    setInProgressSessions((prev) => {
-      const existingIdx = prev.findIndex((s) => s.id === sessionData.id);
-      if (existingIdx >= 0) {
-        const newArr = [...prev];
-        newArr[existingIdx] = sessionData;
-        return newArr;
-      }
-      return [sessionData, ...prev];
-    });
-  };
+  const [selectedGroup, setSelectedGroup] = useState<SelectedGroup | null>(null);
 
   return (
-    <AppContext.Provider
-      value={{
-        groups,
-        inProgressSessions,
-        setGroups,
-        setInProgressSessions,
-        addGroup,
-        saveSession,
-      }}
-    >
+    <AppContext.Provider value={{ selectedGroup, setSelectedGroup }}>
       {children}
     </AppContext.Provider>
   );

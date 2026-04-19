@@ -1,60 +1,75 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Menu, Settings, User, Camera, Edit3, Heart } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import TemplateCard from "@/features/templates/components/TemplateCard";
-import { MOCK_TEMPLATES } from "@/lib/mock-data/templates";
+import { useAuth } from "@/lib/context/AuthContext";
+import { useUI } from "@/lib/context/UIContext";
+import { useScraps } from "@/hooks/useScraps";
+import { useTemplates } from "@/hooks/useTemplates";
+import { userService } from "@/lib/api/userService";
 
-interface UserProfile {
-  name?: string;
-  bio?: string;
-  avatar?: string;
-}
+const MyPageScreen = () => {
+  const router = useRouter();
+  const { userProfile, updateProfile } = useAuth();
+  const { openMenu } = useUI();
+  const { data: scraps = [] } = useScraps();
+  const { data: allTemplates = [] } = useTemplates();
 
-interface MyPageScreenProps {
-  onBack: () => void;
-  onOpenMenu: () => void;
-  activeTab: string;
-  navigateTo: (screen: string, params?: any) => void;
-  scrappedTemplates: string[];
-  userProfile: UserProfile | null;
-  onUpdateProfile: (profile: UserProfile) => void;
-}
-
-const MyPageScreen = ({
-  onBack,
-  onOpenMenu,
-  activeTab,
-  navigateTo,
-  scrappedTemplates,
-  userProfile,
-  onUpdateProfile,
-}: MyPageScreenProps) => {
-  if (activeTab !== "mypage") return null;
-  const savedItems = MOCK_TEMPLATES.filter((t) =>
-    scrappedTemplates.includes(t.id)
+  const savedItems = allTemplates.filter((t) =>
+    scraps.some((s) => s.templateType === t.type)
   );
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(userProfile?.name || "Guest User");
   const [editBio, setEditBio] = useState(userProfile?.bio || "");
   const [editAvatar, setEditAvatar] = useState(
     userProfile?.avatar || "bg-gradient-to-tr from-indigo-500 to-pink-500"
   );
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
-    onUpdateProfile({ name: editName, bio: editBio, avatar: editAvatar });
-    setIsEditing(false);
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      let avatarToSave = editAvatar;
+      if (pendingFile) {
+        const uploadedUrl = await userService.uploadAvatar(pendingFile);
+        avatarToSave = uploadedUrl;
+        setPendingFile(null);
+        // clear any previously stored local avatar
+        localStorage.removeItem("smoodee_profile_avatar");
+      }
+      await userService.updateProfile({ name: editName, bio: editBio });
+      updateProfile({ name: editName, bio: editBio, avatar: avatarToSave });
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleAddImage = () => {
-    setEditAvatar(
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"
-    );
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPendingFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setEditAvatar(dataUrl);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   const handleDefaultImage = () => {
+    setPendingFile(null);
     setEditAvatar("bg-gradient-to-tr from-indigo-500 to-pink-500");
   };
 
@@ -65,7 +80,7 @@ const MyPageScreen = ({
       <div className="px-4 py-3 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md z-10">
         <div className="flex items-center gap-3">
           <button
-            onClick={onOpenMenu}
+            onClick={openMenu}
             className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors"
           >
             <Menu size={24} />
@@ -73,18 +88,26 @@ const MyPageScreen = ({
           <h1 className="text-xl font-black tracking-tight">마이페이지</h1>
         </div>
         <button
-          onClick={() => navigateTo("settings")}
+          onClick={() => router.push("/settings")}
           className="p-2 hover:bg-gray-100 rounded-full"
         >
           <Settings size={20} />
         </button>
       </div>
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
       <div className="px-6 pt-4 pb-8">
         {isEditing ? (
           <div className="flex flex-col items-center animate-fade-in w-full">
             <div className="mb-6 relative">
-              {editAvatar.includes("http") ? (
+              {editAvatar.startsWith("http") || editAvatar.startsWith("data:") ? (
                 <div className="w-24 h-24 rounded-full overflow-hidden ring-4 ring-gray-50 shadow-sm">
                   <img
                     src={editAvatar}
@@ -107,7 +130,7 @@ const MyPageScreen = ({
               <button
                 onClick={handleDefaultImage}
                 className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all border ${
-                  !editAvatar.includes("http")
+                  !editAvatar.startsWith("http") && !editAvatar.startsWith("data:")
                     ? "bg-black text-white border-black shadow-md"
                     : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                 }`}
@@ -117,7 +140,7 @@ const MyPageScreen = ({
               <button
                 onClick={handleAddImage}
                 className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5 ${
-                  editAvatar.includes("http")
+                  editAvatar.startsWith("http") || editAvatar.startsWith("data:")
                     ? "bg-black text-white border-black shadow-md"
                     : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                 }`}
@@ -161,16 +184,17 @@ const MyPageScreen = ({
               </button>
               <button
                 onClick={handleSave}
-                className="flex-1 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition-colors"
+                disabled={isSaving}
+                className="flex-1 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-60"
               >
-                저장 완료
+                {isSaving ? "저장 중..." : "저장 완료"}
               </button>
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center animate-fade-in">
             <div className="relative mb-4">
-              {userProfile?.avatar?.includes("http") ? (
+              {userProfile?.avatar?.startsWith("http") || userProfile?.avatar?.startsWith("data:") ? (
                 <div className="w-24 h-24 rounded-full overflow-hidden ring-4 ring-gray-50 shadow-sm">
                   <img
                     src={userProfile.avatar}
@@ -235,9 +259,8 @@ const MyPageScreen = ({
                 key={t.id}
                 template={t}
                 onClick={() => {
-                  if (t.id === "t1") navigateTo("colorwork");
-                  else if (t.id === "t_day") navigateTo("day_share");
-                  else navigateTo("detail", t);
+                  if (t.type === "COLORWORK") router.push("/colorwork");
+                  else if (t.type === "DAY_SHARE") router.push("/day_share");
                 }}
                 isScrapped={true}
               />

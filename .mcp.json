@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    },
+    "openapi": {
+      "disabled": false,
+      "timeout": 60,
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "tool",
+        "run",
+        "--from",
+        "awslabs.openapi-mcp-server==0.2.14",
+        "--with",
+        "fastmcp==2.14.5",
+        "awslabs.openapi-mcp-server",
+        "--api-name", "local",
+        "--api-url", "http://localhost:8080",
+        "--spec-url", "http://localhost:8080/v3/api-docs",
+        "--log-level", "ERROR"
+      ]
+    }
+  }
+}

@@ -1,56 +1,47 @@
-import React from "react";
-import { Home, Clock, X, User, LogOut, Lock, FolderClock } from "lucide-react";
+"use client";
 
-interface UserProfile {
-  name?: string;
-  avatar?: string;
-  bio?: string;
-}
+import React from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { Home, Clock, X, User, LogOut, Lock, FolderClock } from "lucide-react";
+import { useAuth } from "@/lib/context/AuthContext";
 
 interface SideMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  activeTab: string;
-  onNavigate: (screen: string, params?: any) => void;
-  isLoggedIn: boolean;
-  onLogout: () => void;
-  userProfile?: UserProfile | null;
 }
 
-const SideMenu = ({
-  isOpen,
-  onClose,
-  activeTab,
-  onNavigate,
-  isLoggedIn,
-  onLogout,
-  userProfile,
-}: SideMenuProps) => {
+const SideMenu = ({ isOpen, onClose }: SideMenuProps) => {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { isLoggedIn, userProfile, logout } = useAuth();
+
   if (!isOpen) return null;
 
+  const activeTab =
+    pathname === "/" ? "home"
+    : pathname.startsWith("/inprogress") ? "inprogress"
+    : pathname.startsWith("/recent") ? "recent"
+    : "";
+
   const menuItems = [
-    { id: "home", icon: Home, label: "홈", public: true },
-    {
-      id: "inprogress",
-      icon: FolderClock,
-      label: "진행 중인 템플릿",
-      public: false,
-    },
-    { id: "recent", icon: Clock, label: "보관함", public: false },
+    { id: "home", path: "/", icon: Home, label: "홈", public: true },
+    { id: "inprogress", path: "/inprogress", icon: FolderClock, label: "진행 중인 템플릿", public: false },
+    { id: "recent", path: "/recent", icon: Clock, label: "보관함", public: false },
   ];
 
-  const handleItemClick = (item: { id: string; public: boolean }) => {
+  const handleItemClick = (item: { path: string; public: boolean }) => {
+    onClose();
     if (!item.public && !isLoggedIn) {
-      onClose();
-      onNavigate("login");
+      router.push("/login");
     } else {
-      onNavigate(item.id);
+      router.push(item.path);
     }
   };
 
-  const handleLoginClick = () => {
+  const handleLogout = () => {
+    logout();
     onClose();
-    onNavigate("login");
+    router.push("/");
   };
 
   return (
@@ -65,11 +56,9 @@ const SideMenu = ({
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center text-white font-bold text-lg">
-                  T
+                  S
                 </div>
-                <h2 className="text-xl font-black tracking-tight">
-                  TemplateApp
-                </h2>
+                <h2 className="text-xl font-black tracking-tight">Smoodee</h2>
               </div>
               <button
                 onClick={onClose}
@@ -105,9 +94,9 @@ const SideMenu = ({
             {isLoggedIn ? (
               <div
                 className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100"
-                onClick={() => onNavigate("mypage")}
+                onClick={() => { onClose(); router.push("/mypage"); }}
               >
-                {userProfile?.avatar?.includes("http") ? (
+                {userProfile?.avatar?.startsWith("http") || userProfile?.avatar?.startsWith("data:") ? (
                   <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-indigo-100 shrink-0">
                     <img
                       src={userProfile.avatar}
@@ -118,8 +107,7 @@ const SideMenu = ({
                 ) : (
                   <div
                     className={`w-10 h-10 rounded-full ${
-                      userProfile?.avatar ||
-                      "bg-gradient-to-tr from-indigo-500 to-purple-500"
+                      userProfile?.avatar || "bg-gradient-to-tr from-indigo-500 to-purple-500"
                     } p-[2px] shrink-0`}
                   >
                     <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
@@ -133,10 +121,7 @@ const SideMenu = ({
                   </p>
                 </div>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onLogout();
-                  }}
+                  onClick={(e) => { e.stopPropagation(); handleLogout(); }}
                   className="text-gray-400 hover:text-red-500 transition-colors shrink-0"
                 >
                   <LogOut size={18} />
@@ -149,16 +134,12 @@ const SideMenu = ({
                     <User size={18} className="text-gray-400" />
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-gray-900">
-                      로그인이 필요합니다
-                    </p>
-                    <p className="text-[10px] text-gray-500">
-                      더 많은 기능을 이용해보세요
-                    </p>
+                    <p className="font-bold text-sm text-gray-900">로그인이 필요합니다</p>
+                    <p className="text-[10px] text-gray-500">더 많은 기능을 이용해보세요</p>
                   </div>
                 </div>
                 <button
-                  onClick={handleLoginClick}
+                  onClick={() => { onClose(); router.push("/login"); }}
                   className="w-full py-3 bg-black text-white rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors"
                 >
                   로그인 / 회원가입

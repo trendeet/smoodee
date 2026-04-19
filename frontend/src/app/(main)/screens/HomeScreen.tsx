@@ -12,98 +12,114 @@ import {
   Camera,
   Sparkles,
   UserPlus,
+  MessageCircle,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import StatusBar from "@/components/ui/StatusBar";
-import Button from "@/components/ui/Button";
 import TemplateCard from "@/features/templates/components/TemplateCard";
-import { MOCK_TEMPLATES } from "@/lib/mock-data/templates";
-import useTimeout from "@/hooks/useTimeout";
+import { useScraps } from "@/hooks/useScraps";
+import { useNotifications } from "@/hooks/useNotifications";
+import { useTemplates } from "@/hooks/useTemplates";
+import { useUI } from "@/lib/context/UIContext";
+import { useAuth } from "@/lib/context/AuthContext";
+import { TemplateResponse } from "@/lib/api/types";
+import { groupService } from "@/lib/api/groupService";
 
-interface HomeScreenProps {
-  navigateTo: (screen: string, params?: any) => void;
-  activeTab: string;
-  onOpenMenu: () => void;
-  scrappedTemplates: string[];
-  toggleScrap: (id: string) => void;
-}
+const FALLBACK_TEMPLATES: TemplateResponse[] = [
+  {
+    id: 1,
+    type: "COLORWORK",
+    title: "컬러워크",
+    tags: ["개인"],
+    description: "나만의 색상으로 사진 기록",
+  },
+  {
+    id: 2,
+    type: "DAYSHARE",
+    title: "하루 공유",
+    tags: ["그룹"],
+    description: "그룹과 함께 하루 기록",
+  },
+];
 
-const HomeScreen = ({
-  navigateTo,
-  activeTab,
-  onOpenMenu,
-  scrappedTemplates,
-  toggleScrap,
-}: HomeScreenProps) => {
-  const [filter, setFilter] = useState("All");
-  const [isLoading, setIsLoading] = useState(true);
+const HomeScreen = () => {
+  const router = useRouter();
+  const { isScrapped, toggle } = useScraps();
+  const { data: notifications = [], markRead } = useNotifications();
+  const { data: rawTemplates, isLoading: templatesLoading } = useTemplates();
+  const templatesData =
+    rawTemplates && rawTemplates.length > 0
+      ? rawTemplates
+      : !templatesLoading
+      ? FALLBACK_TEMPLATES
+      : [];
+  const { openMenu } = useUI();
+  const { isLoggedIn } = useAuth();
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [filter, setFilter] = useState("전체");
+  const [searchText, setSearchText] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showDayShareSheet, setShowDayShareSheet] = useState(false);
+  const [showJoinInput, setShowJoinInput] = useState(false);
+  const [inviteCodeInput, setInviteCodeInput] = useState("");
+  const [inviteCodeError, setInviteCodeError] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
 
-  useTimeout(() => setIsLoading(false), 1200);
-  const filters = ["All", "Story", "Feed", "Group", "Trending"];
+  const filters = ["전체", "개인", "그룹"];
 
-  const notifications = [
-    {
-      id: 1,
-      type: "success",
-      icon: <Check size={16} />,
-      color: "bg-green-100 text-green-600",
-      text: "'모닝루틴 인증 ☀️' 그룹이 100% 달성되었어요! 지금 보관함으로 옮길 수 있습니다.",
-      time: "10분 전",
-    },
-    {
-      id: 2,
-      type: "activity",
-      icon: <Camera size={16} />,
-      color: "bg-blue-100 text-blue-600",
-      text: "김대리님이 '점심 기록방 🍱'에 오늘의 점심을 인증했습니다.",
-      time: "1시간 전",
-    },
-    {
-      id: 3,
-      type: "system",
-      icon: <Sparkles size={16} />,
-      color: "bg-purple-100 text-purple-600",
-      text: "새로운 트렌딩 템플릿 '겨울 바다 무드'가 추가되었습니다. 구경해보세요!",
-      time: "3시간 전",
-    },
-    {
-      id: 4,
-      type: "group",
+  const unreadNotifications = notifications.filter((n) => !n.read);
+  const hasUnread = unreadNotifications.length > 0;
+
+  const notifIcon = (type: string) => {
+    if (type === "GROUP_COMPLETE" || type === "GROUP_RENDER_DONE")
+      return {
+        icon: <Check size={16} />,
+        color: "bg-green-100 text-green-600",
+      };
+    if (type === "SLOT_FILLED" || type === "SLOT_UPLOAD_DONE")
+      return { icon: <Camera size={16} />, color: "bg-blue-100 text-blue-600" };
+    if (type === "NEW_TEMPLATE")
+      return {
+        icon: <Sparkles size={16} />,
+        color: "bg-purple-100 text-purple-600",
+      };
+    if (type === "NEW_CHAT_MESSAGE")
+      return {
+        icon: <MessageCircle size={16} />,
+        color: "bg-indigo-100 text-indigo-600",
+      };
+    return {
       icon: <UserPlus size={16} />,
       color: "bg-orange-100 text-orange-600",
-      text: "'하루 공유' 그룹에 새로운 멤버 '갓생'님이 참여했습니다.",
-      time: "1일 전",
-    },
-  ];
-
-  if (activeTab !== "home") return null;
+    };
+  };
 
   return (
     <div className="flex flex-col h-full bg-white pb-safe overflow-y-auto no-scrollbar relative">
       <StatusBar theme="dark" />
       <div className="px-4 pb-2 sticky top-0 bg-white/95 backdrop-blur-md z-10 border-b border-gray-100/50">
-        <div className="flex items-center justify-between mb-3 pt-1">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <button
-              onClick={onOpenMenu}
+              onClick={openMenu}
               className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors"
             >
               <Menu size={24} />
             </button>
-            <h1 className="text-2xl font-black tracking-tight text-gray-900">
-              Templates
-            </h1>
+            <h1 className="text-xl font-black tracking-tight">Smoodee</h1>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={Bell}
+          <button
             onClick={() => setShowNotifications(true)}
-            className="!p-2 rounded-full hover:bg-gray-100"
-          />
+            className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+          >
+            <Bell size={20} />
+            {hasUnread && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+            )}
+          </button>
         </div>
         <button
-          onClick={() => navigateTo("guide")}
+          onClick={() => router.push("/guide")}
           className="w-full mb-3 bg-gray-900 text-white rounded-2xl p-3 flex items-center justify-between shadow-lg active:scale-98 transition-transform"
         >
           <div className="flex items-center gap-3">
@@ -125,6 +141,8 @@ const HomeScreen = ({
             />
             <input
               type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
               placeholder="템플릿 검색..."
               className="w-full bg-gray-100 rounded-2xl pl-10 pr-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black/5 focus:bg-white transition-all shadow-sm"
             />
@@ -148,39 +166,72 @@ const HomeScreen = ({
       </div>
       <div className="px-4 mt-6">
         <h2 className="font-bold text-lg mb-4 flex items-center gap-2 text-gray-900">
-          {filter === "All" ? "이번 주 인기" : `${filter} 템플릿`}
+          {searchText
+            ? `"${searchText}" 검색 결과`
+            : filter === "전체"
+            ? "이번 주 인기"
+            : `${filter} 템플릿`}
         </h2>
         <div className="grid grid-cols-2 gap-4">
-          {isLoading
-            ? Array(4)
-                .fill(0)
-                .map((_, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="aspect-[4/5] bg-gray-100 rounded-2xl animate-pulse" />
-                    <div className="h-4 bg-gray-100 rounded w-3/4 animate-pulse" />
-                    <div className="h-3 bg-gray-100 rounded w-1/2 animate-pulse" />
+          {templatesLoading && (
+            <div className="col-span-2 py-12 flex items-center justify-center text-gray-400 text-sm">
+              불러오는 중...
+            </div>
+          )}
+          {!templatesLoading &&
+            (() => {
+              const filtered = templatesData.filter((t) => {
+                const tags = Array.isArray(t.tags) ? t.tags : [];
+                const matchesFilter =
+                  filter === "전체"
+                    ? true
+                    : filter === "개인"
+                    ? tags.includes("개인") || t.type === "COLORWORK"
+                    : filter === "그룹"
+                    ? tags.includes("그룹") || t.type === "DAYSHARE"
+                    : tags.includes(filter);
+
+                const q = searchText.toLowerCase();
+                const matchesSearch =
+                  !q ||
+                  (t.title ?? "").toLowerCase().includes(q) ||
+                  (t.description ?? "").toLowerCase().includes(q) ||
+                  tags.some((tag) => tag.toLowerCase().includes(q));
+
+                return matchesFilter && matchesSearch;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="col-span-2 py-16 flex flex-col items-center justify-center text-gray-400">
+                    <Search size={28} className="mb-3 opacity-30" />
+                    <p className="text-sm font-medium">검색 결과가 없어요</p>
                   </div>
-                ))
-            : MOCK_TEMPLATES.filter(
-                (t) => filter === "All" || t.tags.includes(filter)
-              ).map((t) => (
+                );
+              }
+
+              return filtered.map((t) => (
                 <TemplateCard
                   key={t.id}
                   template={t}
                   onClick={() => {
-                    if (t.id === "t1") navigateTo("colorwork");
-                    else if (t.id === "t_day") navigateTo("day_share");
-                    else navigateTo("detail", t);
+                    if (t.type === "COLORWORK") router.push("/colorwork");
+                    else if (t.type === "DAYSHARE") { setShowDayShareSheet(true); setShowJoinInput(false); setInviteCodeInput(""); }
+                    else router.push("/");
                   }}
-                  isScrapped={scrappedTemplates.includes(t.id)}
-                  onScrap={toggleScrap}
+                  isScrapped={isScrapped(t.type)}
+                  onScrap={() => {
+                    if (!isLoggedIn) { setShowLoginPrompt(true); return; }
+                    toggle(t.type);
+                  }}
                 />
-              ))}
+              ));
+            })()}
         </div>
       </div>
 
       {showNotifications && (
-        <div className="absolute inset-0 z-50 bg-white animate-slide-left flex flex-col pb-safe">
+        <div className="absolute inset-0 z-50 bg-white animate-slide-down flex flex-col pb-safe">
           <StatusBar theme="dark" />
           <div className="px-4 py-3 flex items-center gap-3 border-b border-gray-100 sticky top-0 bg-white/95 backdrop-blur-md z-10">
             <button
@@ -195,26 +246,45 @@ const HomeScreen = ({
           </div>
 
           <div className="flex-1 overflow-y-auto p-2">
-            {notifications.map((noti) => (
-              <div
-                key={noti.id}
-                className="flex gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-colors cursor-pointer active:scale-[0.98]"
-              >
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${noti.color}`}
-                >
-                  {noti.icon}
-                </div>
-                <div className="flex-1 border-b border-gray-50 pb-4">
-                  <p className="text-sm font-medium text-gray-900 leading-snug break-keep mb-1">
-                    {noti.text}
-                  </p>
-                  <span className="text-xs font-bold text-gray-400">
-                    {noti.time}
-                  </span>
-                </div>
+            {unreadNotifications.length > 0 ? (
+              unreadNotifications.map((noti) => {
+                const { icon, color } = notifIcon(noti.type);
+                return (
+                  <div
+                    key={noti.id}
+                    onClick={() => {
+                      markRead.mutate(noti.id);
+                      if (noti.type === "NEW_CHAT_MESSAGE" && noti.referenceId) {
+                        setShowNotifications(false);
+                        router.push(`/inprogress/group/${noti.referenceId}?tab=chat`);
+                      }
+                    }}
+                    className={`flex gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-colors cursor-pointer active:scale-[0.98] ${
+                      !noti.read ? "bg-blue-50/30" : ""
+                    }`}
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${color}`}
+                    >
+                      {icon}
+                    </div>
+                    <div className="flex-1 border-b border-gray-50 pb-4">
+                      <p className="text-sm font-medium text-gray-900 leading-snug break-keep mb-1">
+                        {noti.body}
+                      </p>
+                      <span className="text-xs font-bold text-gray-400">
+                        {new Date(noti.createdAt).toLocaleDateString("ko-KR")}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <Bell size={32} className="mb-3 opacity-20" />
+                <p className="text-sm font-medium">새로운 알림이 없습니다</p>
               </div>
-            ))}
+            )}
 
             <div className="pt-8 pb-12 flex flex-col items-center justify-center opacity-60">
               <div className="w-1 h-1 bg-gray-300 rounded-full mb-1"></div>
@@ -224,6 +294,120 @@ const HomeScreen = ({
                 오래된 알림이 없습니다
               </span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 하루 공유 선택 바텀 시트 */}
+      {showDayShareSheet && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+          onClick={() => setShowDayShareSheet(false)}
+        >
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative w-full max-w-[390px] bg-white rounded-3xl px-6 pt-6 pb-8 mx-4 animate-fade-in shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-6" />
+            {!showJoinInput ? (
+              <>
+                <h2 className="text-lg font-black text-gray-900 mb-1">하루 공유</h2>
+                <p className="text-sm text-gray-400 mb-6">그룹을 만들거나 초대코드로 입장하세요.</p>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => { setShowDayShareSheet(false); router.push("/day_share"); }}
+                    className="w-full py-4 bg-black text-white font-bold rounded-2xl text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+                  >
+                    <UserPlus size={16} /> 그룹 만들기
+                  </button>
+                  <button
+                    onClick={() => setShowJoinInput(true)}
+                    className="w-full py-4 font-bold rounded-2xl text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-transform text-gray-700"
+                    style={{ background: "#F8FAFC", border: "3px solid #333", boxShadow: "4px 4px 0 rgba(0,0,0,0.12)" }}
+                  >
+                    <MessageCircle size={16} /> 그룹 입장하기
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setShowJoinInput(false)}
+                  className="mb-4 p-1 -ml-1 rounded-full hover:bg-gray-100 w-fit"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <h2 className="text-lg font-black text-gray-900 mb-1">그룹 입장하기</h2>
+                <p className="text-sm text-gray-400 mb-6">초대코드를 입력해주세요.</p>
+                <input
+                  type="text"
+                  value={inviteCodeInput}
+                  onChange={(e) => { setInviteCodeInput(e.target.value.toUpperCase()); setInviteCodeError(false); }}
+                  placeholder="초대코드 입력"
+                  className={`w-full bg-gray-50 rounded-2xl px-4 py-4 font-bold text-center text-lg tracking-widest focus:outline-none focus:ring-2 transition-all mb-1 border ${inviteCodeError ? "border-red-400 focus:ring-red-200" : "border-gray-200 focus:ring-black/10"}`}
+                  maxLength={8}
+                  autoFocus
+                />
+                {inviteCodeError && (
+                  <p className="text-xs text-red-500 font-medium text-center mb-3">존재하지 않는 초대코드예요. 다시 확인해주세요.</p>
+                )}
+                <div className={inviteCodeError ? "mt-1" : "mt-4"}>
+                  <button
+                    onClick={async () => {
+                      if (!inviteCodeInput.trim() || isJoining) return;
+                      setIsJoining(true);
+                      setInviteCodeError(false);
+                      try {
+                        await groupService.getGroupByInviteCode(inviteCodeInput.trim());
+                        setShowDayShareSheet(false);
+                        router.push(`/group/${inviteCodeInput.trim()}`);
+                      } catch {
+                        setInviteCodeError(true);
+                      } finally {
+                        setIsJoining(false);
+                      }
+                    }}
+                    disabled={!inviteCodeInput.trim() || isJoining}
+                    className="w-full py-4 bg-black text-white font-bold rounded-2xl text-sm active:scale-[0.98] transition-transform disabled:opacity-40 flex items-center justify-center gap-2"
+                  >
+                    {isJoining ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : "입장하기"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 로그인 필요 팝업 */}
+      {showLoginPrompt && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center px-8"
+          onClick={() => setShowLoginPrompt(false)}
+        >
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative w-full max-w-xs bg-white rounded-3xl px-6 py-8 flex flex-col items-center gap-4 shadow-xl animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-3xl">🔒</div>
+            <div className="text-center">
+              <p className="font-bold text-base text-gray-900">로그인이 필요해요</p>
+              <p className="text-xs text-gray-500 mt-1">찜하려면 먼저 로그인해 주세요.</p>
+            </div>
+            <button
+              onClick={() => router.push("/login")}
+              className="w-full py-3 bg-[#1A1A1A] text-white font-bold rounded-2xl text-sm active:scale-[0.98] transition-transform"
+            >
+              로그인하기
+            </button>
+            <button
+              onClick={() => setShowLoginPrompt(false)}
+              className="text-xs text-gray-400 font-medium"
+            >
+              나중에 하기
+            </button>
           </div>
         </div>
       )}

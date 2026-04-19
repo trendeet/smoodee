@@ -1,31 +1,19 @@
+"use client";
+
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronLeft, User, Mail, Key } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
-
-interface UserInfo {
-  name: string;
-  email: string;
-}
-
-interface SignupScreenProps {
-  onBack: () => void;
-  onSignupSuccess: (userInfo: UserInfo) => void;
-}
-
-const SignupScreen = ({ onBack, onSignupSuccess }: SignupScreenProps) => {
+const SignupScreen = () => {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleSignup = () => {
-    if (!name || !email || !password) return;
-    setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      onSignupSuccess({ name: name, email: email });
-    }, 1000);
+    // 소셜 로그인(Google OAuth2)으로 가입합니다
+    window.location.href = `${process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"}/oauth2/authorization/google`;
   };
 
   return (
@@ -33,7 +21,7 @@ const SignupScreen = ({ onBack, onSignupSuccess }: SignupScreenProps) => {
       <StatusBar theme="dark" />
       <div className="px-6 pt-12 pb-6">
         <button
-          onClick={onBack}
+          onClick={() => router.back()}
           className="mb-6 p-2 -ml-2 rounded-full hover:bg-gray-100 w-fit"
         >
           <ChevronLeft />
@@ -103,8 +91,6 @@ const SignupScreen = ({ onBack, onSignupSuccess }: SignupScreenProps) => {
         <Button
           size="lg"
           onClick={handleSignup}
-          loading={isLoading}
-          disabled={!name || !email || !password}
         >
           가입하고 시작하기
         </Button>

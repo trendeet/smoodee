@@ -1,23 +1,21 @@
 "use client";
 
 import React from "react";
+import { useRouter } from "next/navigation";
 import { ChevronLeft, HelpCircle, Grid, Info, Users } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
 
-interface GuideScreenProps {
-  onBack: () => void;
-}
+const GuideScreen = () => {
+  const router = useRouter();
 
-const GuideScreen = ({ onBack }: GuideScreenProps) => {
   return (
     <div className="flex flex-col h-full bg-white relative animate-fade-in pb-safe">
       <StatusBar theme="dark" />
 
-      {/* 상단 헤더 */}
       <div className="px-4 py-3 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-md z-10 border-b border-gray-100">
         <button
-          onClick={onBack}
+          onClick={() => router.back()}
           className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors text-gray-600"
         >
           <ChevronLeft size={24} />
@@ -28,7 +26,6 @@ const GuideScreen = ({ onBack }: GuideScreenProps) => {
         <div className="w-8" />
       </div>
 
-      {/* 스크롤되는 가이드 내용 */}
       <div className="flex-1 overflow-y-auto px-6 py-10 space-y-16">
         <div className="text-center">
           <div className="w-16 h-16 bg-black rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
@@ -43,7 +40,6 @@ const GuideScreen = ({ onBack }: GuideScreenProps) => {
         </div>
 
         <div className="space-y-12">
-          {/* Step 1 */}
           <div className="flex flex-col items-center text-center">
             <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-5 border border-gray-100 shadow-inner relative">
               <Grid size={32} className="text-blue-500" />
@@ -61,7 +57,6 @@ const GuideScreen = ({ onBack }: GuideScreenProps) => {
             </p>
           </div>
 
-          {/* Step 2 */}
           <div className="flex flex-col items-center text-center">
             <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-5 border border-gray-100 shadow-inner relative">
               <Info size={32} className="text-purple-500" />
@@ -81,7 +76,6 @@ const GuideScreen = ({ onBack }: GuideScreenProps) => {
             </p>
           </div>
 
-          {/* Step 3 */}
           <div className="flex flex-col items-center text-center pb-8">
             <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-5 border border-gray-100 shadow-inner relative">
               <Users size={32} className="text-orange-500" />
@@ -106,9 +100,8 @@ const GuideScreen = ({ onBack }: GuideScreenProps) => {
         </div>
       </div>
 
-      {/* 하단 고정 버튼 */}
       <div className="p-6 bg-white border-t border-gray-100 safe-area-bottom sticky bottom-0 z-10">
-        <Button size="lg" onClick={onBack} className="w-full shadow-lg">
+        <Button size="lg" onClick={() => router.back()} className="w-full shadow-lg">
           플랫폼 시작하기
         </Button>
       </div>

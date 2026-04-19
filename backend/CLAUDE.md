@@ -1,25 +1,26 @@
-# Backend 규칙
+# Backend Guide
 
-## 기술 스택
-- Node.js + TypeScript
-- REST API
+Stack: Java 17, Spring Boot 3.5, Spring Data JPA, MySQL 8.0, springdoc-openapi 2.7.0
 
-## 코드 스타일
-- 파일명: camelCase (`authController.ts`)
-- 라우트 경로: kebab-case (`/api/template-cards`)
-- 에러 응답은 일관된 형식: `{ error: string, code: string }`
+## Commands
+```bash
+./gradlew bootRun              # 서버 시작 (port 8080)
+./gradlew test                 # 테스트
+./gradlew spotlessApply        # 포맷팅 자동 수정
+./gradlew check                # 전체 CI 검증
+```
 
-## API 규칙
-- RESTful 설계 원칙 준수
-- 인증이 필요한 엔드포인트는 미들웨어로 보호
-- 요청 검증(validation)은 컨트롤러 진입 전에 처리
-- 페이지네이션: `?page=1&limit=20` 형식
+## Architecture
+Layers: Controller -> Service -> Repository -> Domain
+Controller는 *Api.java 인터페이스를 구현 (Swagger 어노테이션 분리).
 
-## 환경변수
-- `.env` 파일은 커밋 금지
-- `.env.example` 에 키 목록만 유지
+## Must-Know Patterns
+- 에러: `throw new BusinessException(ErrorCode.XXX)`
+- 페이지네이션: `PageResponse.from(page)`
+- 베이스 엔티티: `BaseTimeEntity` 상속 (id, createdAt, updatedAt)
+- 인증 Principal: `CustomerPrincipal`, `OwnerPrincipal`
+- 테스트: `@MockitoBean` 사용 (`@MockBean` 금지)
 
-## 테스트
-- 유닛 테스트: Vitest
-- API 테스트: supertest
-- `npm run test` 로 실행
+## Before Coding
+`docs/api-reference.md`와 `docs/utility-registry.md`를 읽고 기존 코드 중복 방지.
+Skills: `.claude/skills/backend-core/`, `.claude/skills/backend-testing/`

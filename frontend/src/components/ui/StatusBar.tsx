@@ -5,7 +5,7 @@ interface StatusBarProps {
 }
 
 const StatusBar = ({ theme = "dark" }: StatusBarProps) => {
-  return <div className="pt-3 pb-2 z-50 select-none" />;
+  return <div className="pt-1 pb-2 z-50 select-none" />;
 };
 
 export default StatusBar;

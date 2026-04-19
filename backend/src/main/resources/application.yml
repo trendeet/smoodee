@@ -1,0 +1,28 @@
+spring:
+  profiles:
+    active: local
+  application:
+    name: smoodee
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: Asia/Seoul
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  level:
+    com.smoodee: DEBUG
