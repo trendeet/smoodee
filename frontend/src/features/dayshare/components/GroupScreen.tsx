@@ -71,7 +71,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
 import Toast from "@/components/ui/Toast";
-import MockResultModal from "./MockResultModal";
 import ScrollTimePicker from "./ScrollTimePicker";
 import { groupService } from "@/lib/api/groupService";
 import { slotService } from "@/lib/api/slotService";
@@ -177,7 +176,6 @@ const GroupScreen = () => {
     if (typeof window === "undefined" || !groupId) return 0;
     return Number(localStorage.getItem(`chat_seen_${groupId}`) ?? 0);
   });
-  const [showMockResult, setShowMockResult] = useState(false);
   const [showAllProgress, setShowAllProgress] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
@@ -591,12 +589,6 @@ const GroupScreen = () => {
         accept="image/*"
         className="hidden"
         onChange={handleCoverChange}
-      />
-      <MockResultModal
-        isOpen={showMockResult}
-        onClose={() => setShowMockResult(false)}
-        memberCount={memberCount}
-        slots={[]}
       />
 
       {/* 삭제 확인 바텀시트 */}
@@ -1085,15 +1077,6 @@ const GroupScreen = () => {
             )}
           </div>
 
-          {/* 레이아웃 미리보기 */}
-          <div className="px-4 mt-2 flex justify-center">
-            <button
-              onClick={() => setShowMockResult(true)}
-              className="text-xs text-gray-400 underline underline-offset-2 active:text-gray-600"
-            >
-              결과물 레이아웃 미리보기
-            </button>
-          </div>
 
           {/* 멤버별 진행률 */}
           <div className="mx-4 mt-4">
