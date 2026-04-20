@@ -4,11 +4,27 @@ backend/node_modules/
 
 # Next.js build output
 frontend/.next/
+frontend/package-lock.json
 
 # Environment variables
 .env
 .env.local
 .env*.local
+deploy/.env.deploy
+
+# Gradle build
+backend/.gradle/
+backend/build/
+
+# Terraform state (contains sensitive data)
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/.terraform/
+infra/.terraform.lock.hcl
+
+# Claude local settings
+.claude/settings.local.json
+.claude/skills/
 
 # OS
 .DS_Store
