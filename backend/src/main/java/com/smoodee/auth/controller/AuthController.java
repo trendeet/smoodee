@@ -10,6 +10,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -61,18 +63,24 @@ public class AuthController {
   }
 
   private void setRefreshCookie(HttpServletResponse response, String token) {
-    Cookie cookie = new Cookie("refreshToken", token);
-    cookie.setHttpOnly(true);
-    cookie.setPath("/");
-    cookie.setMaxAge(14 * 24 * 60 * 60);
-    response.addCookie(cookie);
+    ResponseCookie cookie = ResponseCookie.from("refreshToken", token)
+        .httpOnly(true)
+        .secure(true)
+        .sameSite("None")
+        .path("/")
+        .maxAge(14 * 24 * 60 * 60)
+        .build();
+    response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
   }
 
   private void deleteRefreshCookie(HttpServletResponse response) {
-    Cookie cookie = new Cookie("refreshToken", "");
-    cookie.setHttpOnly(true);
-    cookie.setPath("/");
-    cookie.setMaxAge(0);
-    response.addCookie(cookie);
+    ResponseCookie cookie = ResponseCookie.from("refreshToken", "")
+        .httpOnly(true)
+        .secure(true)
+        .sameSite("None")
+        .path("/")
+        .maxAge(0)
+        .build();
+    response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
   }
 }

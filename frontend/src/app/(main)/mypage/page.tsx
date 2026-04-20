@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/context/AuthContext";
 import { useUI } from "@/lib/context/UIContext";
 import { useScraps } from "@/hooks/useScraps";
 import { useTemplates } from "@/hooks/useTemplates";
+import { useProjects } from "@/hooks/useProjects";
 import { userService } from "@/lib/api/userService";
 
 const MyPageScreen = () => {
@@ -17,6 +18,7 @@ const MyPageScreen = () => {
   const { openMenu } = useUI();
   const { data: scraps = [] } = useScraps();
   const { data: allTemplates = [] } = useTemplates();
+  const { data: groupProjects = [] } = useProjects({ type: "GROUP", tab: "IN_PROGRESS" });
 
   const savedItems = allTemplates.filter((t) =>
     scraps.some((s) => s.templateType === t.type)
@@ -236,7 +238,7 @@ const MyPageScreen = () => {
                 <span className="text-xs text-gray-500 font-bold">스크랩</span>
               </div>
               <div className="flex-1 bg-gray-50 rounded-2xl p-4 flex flex-col items-center">
-                <span className="text-2xl font-black text-gray-900">3</span>
+                <span className="text-2xl font-black text-gray-900">{groupProjects.length}</span>
                 <span className="text-xs text-gray-500 font-bold">
                   참여 그룹
                 </span>
