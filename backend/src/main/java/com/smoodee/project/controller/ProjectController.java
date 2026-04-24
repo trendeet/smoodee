@@ -64,7 +64,8 @@ public class ProjectController {
                         String paletteColor = colorworkService.getPaletteColor(project.getId());
                         return ProjectResponse.from(
                             project, progress[0], progress[1], thumbnailUrl, paletteColor,
-                            colorworkService.getAllFrameUrls(project.getId(), principal.getUserId()));
+                            colorworkService.getAllFrameUrls(project.getId(), principal.getUserId()),
+                            colorworkService.getGridType(project.getId()));
                       }
                       if (project.getTemplateType() == TemplateType.DAYSHARE) {
                         return groupRepository
@@ -99,7 +100,8 @@ public class ProjectController {
                       String paletteColor = colorworkService.getPaletteColor(project.getId());
                       return ProjectResponse.from(
                           project, progress[0], progress[1], thumbnailUrl, paletteColor,
-                          colorworkService.getAllFrameUrls(project.getId(), principal.getUserId()));
+                          colorworkService.getAllFrameUrls(project.getId(), principal.getUserId()),
+                          colorworkService.getGridType(project.getId()));
                     }
                     if (project.getTemplateType() == TemplateType.DAYSHARE) {
                       return groupRepository

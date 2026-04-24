@@ -32,10 +32,17 @@ public class PersonalColorworkConfig {
   @Column(nullable = false)
   private boolean howtoSeen;
 
+  @Column(length = 300)
+  private String thumbnailS3Key;
+
   @Builder
   public PersonalColorworkConfig(Long projectId) {
     this.projectId = projectId;
     this.howtoSeen = false;
+  }
+
+  public void updateThumbnailKey(String s3Key) {
+    this.thumbnailS3Key = s3Key;
   }
 
   public void markHowtoSeen() {

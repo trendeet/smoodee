@@ -8,6 +8,7 @@ import StatusBar from "@/components/ui/StatusBar";
 import { useUI } from "@/lib/context/UIContext";
 import { useProjects } from "@/hooks/useProjects";
 import { projectService } from "@/lib/api/projectService";
+import { LAYOUT_CONFIG } from "@/features/colorwork/layoutConfig";
 
 const RecentScreen = () => {
   const router = useRouter();
@@ -156,24 +157,33 @@ const RecentScreen = () => {
                     className="w-20 h-24 rounded-xl shrink-0 shadow-sm relative overflow-hidden flex items-center justify-center"
                     style={{ backgroundColor: item.paletteColor ?? "#e5e7eb" }}
                   >
-                    {item.frameUrls && item.frameUrls.length > 0 ? (
-                      <div
-                        className={`w-full h-full grid gap-[2px] p-[4px] ${
-                          item.frameUrls.length === 9
-                            ? "grid-cols-3 grid-rows-3"
-                            : item.frameUrls.length === 6
-                            ? "grid-cols-2 grid-rows-3"
-                            : "grid-cols-2 grid-rows-2"
-                        }`}
-                      >
-                        {item.frameUrls.map((url, i) => (
-                          <div key={i} className="overflow-hidden rounded-[3px] min-h-0">
-                            <img src={url} alt="" className="w-full h-full object-cover" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : item.thumbnailUrl ? (
+                    {item.status === "DONE" && item.thumbnailUrl ? (
                       <img src={item.thumbnailUrl} alt="colorwork" className="w-full h-full object-cover" />
+                    ) : item.frameUrls && item.frameUrls.length > 0 && item.gridType ? (
+                      (() => {
+                        const cfg = LAYOUT_CONFIG[item.gridType as keyof typeof LAYOUT_CONFIG];
+                        return cfg ? (
+                          <div
+                            className="w-full h-full grid p-[4px]"
+                            style={{
+                              gridTemplateAreas: cfg.containerStyle.gridTemplateAreas,
+                              gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
+                              gridTemplateRows: cfg.containerStyle.gridTemplateRows,
+                              gap: "2px",
+                            }}
+                          >
+                            {item.frameUrls.map((url, i) => (
+                              <div
+                                key={i}
+                                className="overflow-hidden rounded-[2px] min-h-0 min-w-0"
+                                style={{ gridArea: cfg.areas[i] }}
+                              >
+                                <img src={url} alt="" className="w-full h-full object-cover" />
+                              </div>
+                            ))}
+                          </div>
+                        ) : null;
+                      })()
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center">
                         <div className="grid grid-cols-2 gap-0.5 w-10 h-10 opacity-40">

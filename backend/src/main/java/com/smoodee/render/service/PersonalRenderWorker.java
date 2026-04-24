@@ -120,19 +120,83 @@ public class PersonalRenderWorker {
         .toList();
   }
 
-  private BufferedImage compose(BufferedImage[] images, GridType gridType, String paletteJson) {
-    return compose(List.of(images), gridType, paletteJson);
+  private record Cell(int x, int y, int w, int h) {}
+
+  private List<Cell> getCells(GridType gridType) {
+    final int gw = OUTPUT_WIDTH - 2 * PADDING; // 1040
+
+    return switch (gridType) {
+      case G2 -> {
+        // 3 equal cols, 2 equal rows — staggered wide pattern
+        // Layout: [wide(0-1)][1] / [2][wide(1-2)]
+        int col = (gw - 2 * GRID_GAP) / 3;           // 341
+        int colR = gw - 2 * col - 2 * GRID_GAP;      // 342 (last col absorbs rounding)
+        int px0 = PADDING;
+        int px1 = PADDING + col + GRID_GAP;
+        int px2 = PADDING + 2 * (col + GRID_GAP);
+        int py0 = PADDING;
+        int py1 = PADDING + col + GRID_GAP;
+        yield List.of(
+            new Cell(px0, py0, col * 2 + GRID_GAP, col),              // s0: wide top-left
+            new Cell(px2, py0, colR, col),                              // s1: top-right
+            new Cell(px0, py1, col, col),                               // s2: bottom-left
+            new Cell(px1, py1, col + GRID_GAP + colR, col)             // s3: wide bottom-right
+        );
+      }
+      case G6 -> {
+        // 3 equal cols, 3 equal rows — editorial
+        // Layout: [0][1][2] / [big(0-1, rows 1-2)][4] / [big cont.][5]
+        int col = (gw - 2 * GRID_GAP) / 3;
+        int colR = gw - 2 * col - 2 * GRID_GAP;
+        int px0 = PADDING;
+        int px1 = PADDING + col + GRID_GAP;
+        int px2 = PADDING + 2 * (col + GRID_GAP);
+        int py0 = PADDING;
+        int py1 = PADDING + col + GRID_GAP;
+        int py2 = PADDING + 2 * (col + GRID_GAP);
+        yield List.of(
+            new Cell(px0, py0, col, col),                                           // s0
+            new Cell(px1, py0, col, col),                                           // s1
+            new Cell(px2, py0, colR, col),                                          // s2
+            new Cell(px0, py1, col * 2 + GRID_GAP, col * 2 + GRID_GAP),           // s3: 2×2 big
+            new Cell(px2, py1, colR, col),                                          // s4
+            new Cell(px2, py2, colR, col)                                           // s5
+        );
+      }
+      case G3 -> {
+        // 4 equal cols, 3 equal rows — staircase wide pattern
+        // Row 0: [wide(0-1)][2][3]
+        // Row 1: [4][wide(1-2)][5... wait, 4 cols]
+        // Actually: [3][wide(1-2)][6]  — per slot numbering below
+        int col = (gw - 3 * GRID_GAP) / 4;   // 254 (perfect)
+        int px0 = PADDING;
+        int px1 = PADDING + (col + GRID_GAP);
+        int px2 = PADDING + 2 * (col + GRID_GAP);
+        int px3 = PADDING + 3 * (col + GRID_GAP);
+        int py0 = PADDING;
+        int py1 = PADDING + (col + GRID_GAP);
+        int py2 = PADDING + 2 * (col + GRID_GAP);
+        int wide = col * 2 + GRID_GAP;
+        yield List.of(
+            new Cell(px0, py0, wide, col),   // s0: wide (cols 0-1)
+            new Cell(px2, py0, col, col),    // s1
+            new Cell(px3, py0, col, col),    // s2
+            new Cell(px0, py1, col, col),    // s3
+            new Cell(px1, py1, wide, col),   // s4: wide (cols 1-2)
+            new Cell(px3, py1, col, col),    // s5
+            new Cell(px0, py2, col, col),    // s6
+            new Cell(px1, py2, col, col),    // s7
+            new Cell(px2, py2, wide, col)    // s8: wide (cols 2-3)
+        );
+      }
+    };
   }
 
   private BufferedImage compose(List<BufferedImage> images, GridType gridType, String paletteJson) {
-    int cols = (gridType == GridType.G2 || gridType == GridType.G6) ? 2 : 3;
-    int rows = (gridType == GridType.G6) ? 3 : (gridType == GridType.G2) ? 2 : 3;
+    List<Cell> cells = getCells(gridType);
 
-    int gridAreaWidth = OUTPUT_WIDTH - 2 * PADDING;
-    int cellWidth = (gridAreaWidth - (cols - 1) * GRID_GAP) / cols;
-    int cellHeight = cellWidth; // 정사각형 셀
-    int gridAreaHeight = rows * cellHeight + (rows - 1) * GRID_GAP;
-    int outputHeight = gridAreaHeight + 2 * PADDING;
+    int maxBottom = cells.stream().mapToInt(c -> c.y() + c.h()).max().orElse(OUTPUT_WIDTH);
+    int outputHeight = maxBottom + PADDING;
 
     BufferedImage output =
         new BufferedImage(OUTPUT_WIDTH, outputHeight, BufferedImage.TYPE_INT_RGB);
@@ -141,18 +205,13 @@ public class PersonalRenderWorker {
         RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
     g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
 
-    // 배경: 선택한 팔레트 첫 번째 색상 (없으면 흰색)
     g.setColor(extractFirstColor(paletteJson));
     g.fillRect(0, 0, OUTPUT_WIDTH, outputHeight);
 
-    for (int i = 0; i < images.size() && i < cols * rows; i++) {
-      int col = i % cols;
-      int row = i / cols;
-      int x = PADDING + col * (cellWidth + GRID_GAP);
-      int y = PADDING + row * (cellHeight + GRID_GAP);
-
-      BufferedImage cell = centerCrop(images.get(i), cellWidth, cellHeight);
-      g.drawImage(cell, x, y, cellWidth, cellHeight, null);
+    for (int i = 0; i < images.size() && i < cells.size(); i++) {
+      Cell cell = cells.get(i);
+      BufferedImage cropped = centerCrop(images.get(i), cell.w(), cell.h());
+      g.drawImage(cropped, cell.x(), cell.y(), cell.w(), cell.h(), null);
     }
 
     g.dispose();

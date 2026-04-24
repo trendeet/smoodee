@@ -16,3 +16,14 @@ frontend/.next/
 # Logs
 *.log
 npm-debug.log*
+
+# Build artifacts
+backend/.gradle/
+backend/build/
+frontend/tsconfig.tsbuildinfo
+
+# Prod/secret config
+backend/src/main/resources/application-prod.yml
+
+# Playwright MCP
+.playwright-mcp/

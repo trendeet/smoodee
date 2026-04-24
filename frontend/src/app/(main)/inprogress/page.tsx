@@ -28,6 +28,7 @@ import { useUI } from "@/lib/context/UIContext";
 import { useAuth } from "@/lib/context/AuthContext";
 import { projectService } from "@/lib/api/projectService";
 import { groupService } from "@/lib/api/groupService";
+import { LAYOUT_CONFIG } from "@/features/colorwork/layoutConfig";
 
 const TEMPLATE_NAMES: Record<string, string> = {
   COLORWORK: "컬러워크",
@@ -386,24 +387,33 @@ const InProgressPage = () => {
                           </div>
                         )}
                         <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-red-500 to-orange-400 shadow-inner shrink-0 flex items-center justify-center">
-                          {project.frameUrls && project.frameUrls.length > 0 ? (
-                            <div
-                              className={`w-full h-full grid gap-[2px] p-[3px] bg-white/10 ${
-                                project.frameUrls.length === 9
-                                  ? "grid-cols-3 grid-rows-3"
-                                  : project.frameUrls.length === 6
-                                  ? "grid-cols-2 grid-rows-3"
-                                  : "grid-cols-2 grid-rows-2"
-                              }`}
-                            >
-                              {project.frameUrls.map((url, i) => (
-                                <div key={i} className="overflow-hidden rounded-[3px] min-h-0">
-                                  <img src={url} alt="" className="w-full h-full object-cover" />
-                                </div>
-                              ))}
-                            </div>
-                          ) : project.thumbnailUrl ? (
+                          {project.status === "DONE" && project.thumbnailUrl ? (
                             <img src={project.thumbnailUrl} alt="thumbnail" className="w-full h-full object-cover" />
+                          ) : project.frameUrls && project.frameUrls.length > 0 && project.gridType ? (
+                            (() => {
+                              const cfg = LAYOUT_CONFIG[project.gridType as keyof typeof LAYOUT_CONFIG];
+                              return cfg ? (
+                                <div
+                                  className="w-full h-full grid p-[3px] bg-white/10"
+                                  style={{
+                                    gridTemplateAreas: cfg.containerStyle.gridTemplateAreas,
+                                    gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
+                                    gridTemplateRows: cfg.containerStyle.gridTemplateRows,
+                                    gap: "2px",
+                                  }}
+                                >
+                                  {project.frameUrls.map((url, i) => (
+                                    <div
+                                      key={i}
+                                      className="overflow-hidden rounded-[2px] min-h-0 min-w-0"
+                                      style={{ gridArea: cfg.areas[i] }}
+                                    >
+                                      <img src={url} alt="" className="w-full h-full object-cover" />
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null;
+                            })()
                           ) : (
                             <ImageIcon className="text-white/80" size={24} />
                           )}
