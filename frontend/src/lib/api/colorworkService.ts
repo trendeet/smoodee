@@ -56,6 +56,14 @@ export const colorworkService = {
     await apiClient.put(`/api/v1/personal/colorwork/${projectId}/complete`);
   },
 
+  async uploadThumbnail(projectId: number, blob: Blob): Promise<void> {
+    const form = new FormData();
+    form.append("file", blob, "thumbnail.png");
+    await apiClient.put(`/api/v1/personal/colorwork/${projectId}/thumbnail`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
   async markHowtoSeen(projectId: number): Promise<void> {
     await apiClient.put(`/api/v1/personal/colorwork/${projectId}/howto-seen`);
   },

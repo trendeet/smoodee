@@ -26,6 +26,7 @@ public class ProjectResponse {
   private final Integer memberCount;
   private final Long ownerId;
   private final List<String> frameUrls;
+  private final String gridType;
 
   public static ProjectResponse from(Project project) {
     return ProjectResponse.builder()
@@ -65,7 +66,8 @@ public class ProjectResponse {
       int totalFrames,
       String thumbnailUrl,
       String paletteColor,
-      List<String> frameUrls) {
+      List<String> frameUrls,
+      String gridType) {
     return ProjectResponse.builder()
         .id(project.getId())
         .title(project.getTitle())
@@ -81,6 +83,7 @@ public class ProjectResponse {
         .paletteColor(paletteColor)
         .ownerId(project.getUserId())
         .frameUrls(frameUrls)
+        .gridType(gridType)
         .build();
   }
 }

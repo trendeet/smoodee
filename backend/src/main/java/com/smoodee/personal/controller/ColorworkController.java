@@ -23,7 +23,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @Tag(name = "Personal", description = "개인 컬러워크 API")
 @RestController
@@ -46,7 +48,8 @@ public class ColorworkController {
   @PutMapping("/{projectId}/complete")
   public ResponseEntity<Void> completeProject(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long projectId) {
-    colorworkService.completeProject(projectId, principal.getUserId());
+    Long userId = principal != null ? principal.getUserId() : null;
+    colorworkService.completeProject(projectId, userId);
     return ResponseEntity.noContent().build();
   }
 
@@ -99,6 +102,17 @@ public class ColorworkController {
       @Valid @RequestBody FrameBindRequest request) {
     Long userId = principal != null ? principal.getUserId() : null;
     colorworkService.bindFrame(projectId, userId, index, request.getAssetId());
+    return ResponseEntity.noContent().build();
+  }
+
+  @Operation(summary = "썸네일 이미지 업로드")
+  @PutMapping("/{projectId}/thumbnail")
+  public ResponseEntity<Void> uploadThumbnail(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable Long projectId,
+      @RequestParam("file") MultipartFile file) {
+    Long userId = principal != null ? principal.getUserId() : null;
+    colorworkService.storeThumbnail(projectId, userId, file);
     return ResponseEntity.noContent().build();
   }
 

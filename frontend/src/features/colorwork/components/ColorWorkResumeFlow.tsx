@@ -8,6 +8,7 @@ import {
   Camera,
   RefreshCcw,
   Download,
+  Share2,
   Menu,
 } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
@@ -17,6 +18,7 @@ import { colorworkService } from "@/lib/api/colorworkService";
 import { assetService } from "@/lib/api/assetService";
 import { useUI } from "@/lib/context/UIContext";
 import { ColorPalette as ApiColorPalette } from "@/lib/api/types";
+import { GridLayoutType, LAYOUT_CONFIG, THICKNESS_CONFIG } from "../layoutConfig";
 
 // ─── Local types ───────────────────────────────────────────────────────────
 
@@ -48,17 +50,19 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   const [isPalettesLoading, setIsPalettesLoading] = useState(false);
 
   // ── grid ──
-  const [gridType, setGridType] = useState<"G2" | "G6" | "G3" | null>(null);
+  const [gridType, setGridType] = useState<GridLayoutType | null>(null);
 
   // ── slots ──
   const [slots, setSlots] = useState<(UploadSlot | null)[]>([]);
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
 
-  // ── step 4 ──
+  // ── frame style ──
+  const [frameColor, setFrameColor] = useState<"white" | "black" | "palette">("white");
+  const [frameThickness, setFrameThickness] = useState<"none" | "thin" | "medium">("thin");
+
+  // ── result ──
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [frameColor, setFrameColor] = useState<"white" | "black" | "palette">("white");
-  const [frameThickness, setFrameThickness] = useState<"none" | "thin" | "medium">("medium");
 
   // ── frame modal ──
   const [frameModalStep, setFrameModalStep] = useState<
@@ -68,6 +72,15 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   // ── file upload ──
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingSlotIndex = useRef<number>(-1);
+
+  // ── 프레임 스타일 (공통) ──────────────────────────────────────────────────
+  const tc = THICKNESS_CONFIG[frameThickness];
+  const frameColorHex =
+    frameColor === "black"
+      ? "#000000"
+      : frameColor === "palette"
+      ? (selectedApiPalette?.colors[Math.floor((selectedApiPalette?.colors.length ?? 0) / 2)]?.hex ?? "#e0e0e0")
+      : "#FFFFFF";
 
   // ── Fetch palettes ────────────────────────────────────────────────────────
 
@@ -95,11 +108,11 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
           });
         }
 
-        // Restore grid and slots
+        // Restore grid and slots — backend only knows G2/G6/G3, map to base types
         if (state.gridType) {
           const gt = state.gridType as "G2" | "G6" | "G3";
           setGridType(gt);
-          const slotCount = gt === "G2" ? 4 : gt === "G6" ? 6 : 9;
+          const slotCount = LAYOUT_CONFIG[gt].slotCount;
           const restored: (UploadSlot | null)[] = Array(slotCount).fill(null);
           state.frames.forEach((f) => {
             if (f && f.index < slotCount) {
@@ -109,7 +122,7 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
           setSlots(restored);
         }
 
-        // Determine step based on actual saved data (not derived howtoSeen flag)
+        // Determine step
         if (initialStep && state.gridType) {
           setStep(initialStep);
         } else if (state.gridType) {
@@ -148,11 +161,10 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
 
   // ── Grid ─────────────────────────────────────────────────────────────────
 
-  const handleGridSelect = async (type: "G2" | "G6" | "G3") => {
+  const handleGridSelect = async (type: GridLayoutType) => {
     setGridType(type);
-    const count = type === "G2" ? 4 : type === "G6" ? 6 : 9;
-    setSlots(Array(count).fill(null));
-    await colorworkService.selectGrid(projectId, type);
+    setSlots(Array(LAYOUT_CONFIG[type].slotCount).fill(null));
+    await colorworkService.selectGrid(projectId, LAYOUT_CONFIG[type].backendType);
   };
 
   // ── Upload ───────────────────────────────────────────────────────────────
@@ -332,50 +344,56 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
           </h1>
           <p className="text-gray-500">원하는 레이아웃을 선택해주세요.</p>
         </div>
-        <div className="flex-1 px-6 flex flex-col justify-center gap-4 overflow-y-auto no-scrollbar">
-          {[
-            { type: "G2" as const, count: 4, cols: 2, rows: 2, label: "4장" },
-            { type: "G6" as const, count: 6, cols: 2, rows: 3, label: "6장" },
-            { type: "G3" as const, count: 9, cols: 3, rows: 3, label: "9장" },
-          ].map(({ type, count, cols, rows, label }) => (
-            <button
-              key={type}
-              onClick={() => handleGridSelect(type)}
-              className={`w-full border-2 rounded-3xl p-5 flex items-center gap-6 transition-all shrink-0 ${
-                gridType === type
-                  ? "border-black bg-gray-50 shadow-xl"
-                  : "border-gray-100 hover:border-gray-200"
-              }`}
-            >
-              <div
-                className="grid gap-1.5 shrink-0"
-                style={{
-                  gridTemplateColumns: `repeat(${cols}, 1fr)`,
-                  width: cols * 20 + (cols - 1) * 6,
-                  height: rows * 20 + (rows - 1) * 6,
-                }}
-              >
-                {Array(count)
-                  .fill(0)
-                  .map((_, i) => (
-                    <div key={i} className="bg-gray-200 rounded w-5 h-5" />
-                  ))}
+        <div className="flex-1 px-6 flex flex-col justify-center gap-5 overflow-y-auto no-scrollbar">
+          {(
+            [
+              { countLabel: "4장", variants: ["G2", "G2_GRID"] as const },
+              { countLabel: "6장", variants: ["G6", "G6_GRID"] as const },
+              { countLabel: "9장", variants: ["G3", "G3_GRID"] as const },
+            ] as const
+          ).map(({ countLabel, variants }) => (
+            <div key={countLabel}>
+              <p className="text-sm font-bold text-gray-500 mb-2">{countLabel}</p>
+              <div className="flex gap-3">
+                {variants.map((type) => {
+                  const cfg = LAYOUT_CONFIG[type];
+                  const isSelected = gridType === type;
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => handleGridSelect(type)}
+                      className={`flex-1 border-2 rounded-2xl p-4 flex flex-col items-center gap-3 transition-all ${
+                        isSelected
+                          ? "border-black bg-gray-50 shadow-lg"
+                          : "border-gray-100 hover:border-gray-300"
+                      }`}
+                    >
+                      <div
+                        className="grid gap-[3px]"
+                        style={{
+                          gridTemplateAreas: cfg.previewAreas,
+                          gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
+                          gridTemplateRows: cfg.containerStyle.gridTemplateRows,
+                          width: cfg.previewSize.width,
+                          height: cfg.previewSize.height,
+                        }}
+                      >
+                        {cfg.previewCells.map((area) => (
+                          <div
+                            key={area}
+                            className={`rounded-[2px] ${isSelected ? "bg-gray-400" : "bg-gray-200"}`}
+                            style={{ gridArea: area }}
+                          />
+                        ))}
+                      </div>
+                      <span className={`text-xs font-bold ${isSelected ? "text-gray-900" : "text-gray-400"}`}>
+                        {cfg.label}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-              <span className="font-black text-xl">{label}</span>
-              {gridType === type && (
-                <div className="ml-auto w-5 h-5 rounded-full bg-black flex items-center justify-center shrink-0">
-                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                    <path
-                      d="M1 4L3.5 6.5L9 1"
-                      stroke="white"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-              )}
-            </button>
+            </div>
           ))}
         </div>
         <div className="p-6 pb-safe safe-area-bottom bg-white">
@@ -450,36 +468,53 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
                 </div>
               );
             })()}
+
+          {/* 외부 컨테이너: aspect-ratio로 높이 고정, 배경색 = 선택한 테두리 색 */}
           <div
-            className={`w-4/5 grid gap-2 p-2 rounded-2xl shadow-2xl bg-white ${
-              gridType === "G3" ? "grid-cols-3" : "grid-cols-2"
-            }`}
-            style={gridType === "G6" ? { aspectRatio: "2/3" } : undefined}
+            className={`w-4/5 relative shadow-2xl overflow-hidden ${tc.rounded}`}
+            style={{
+              aspectRatio: gridType ? LAYOUT_CONFIG[gridType].containerStyle.aspectRatio : undefined,
+              backgroundColor: frameColorHex,
+            }}
           >
-            {slots.map((slot, i) => (
-              <div
-                key={i}
-                onClick={() => uploadingIndex === null && handleSlotClick(i)}
-                className={`relative aspect-square rounded-xl overflow-hidden cursor-pointer transition-all active:scale-95 ${
-                  slot ? "bg-gray-800" : "bg-gray-100 hover:bg-gray-200"
-                } flex items-center justify-center`}
-              >
-                {uploadingIndex === i ? (
-                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  </div>
-                ) : slot?.url ? (
-                  <img
-                    src={slot.url}
-                    alt="slot"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <Camera className="text-gray-400" />
-                )}
-              </div>
-            ))}
+            {/* 내부 그리드 */}
+            <div
+              className="absolute inset-0 grid"
+              style={gridType ? {
+                gridTemplateAreas: LAYOUT_CONFIG[gridType].containerStyle.gridTemplateAreas,
+                gridTemplateColumns: LAYOUT_CONFIG[gridType].containerStyle.gridTemplateColumns,
+                gridTemplateRows: LAYOUT_CONFIG[gridType].containerStyle.gridTemplateRows,
+                gap: `${tc.gap}px`,
+                padding: `${tc.pad}px`,
+              } : undefined}
+            >
+              {slots.map((slot, i) => (
+                <div
+                  key={i}
+                  onClick={() => uploadingIndex === null && handleSlotClick(i)}
+                  className={`relative overflow-hidden cursor-pointer transition-all active:scale-95 ${
+                    slot ? "bg-gray-800" : "bg-gray-100 hover:bg-gray-200"
+                  } flex items-center justify-center min-h-0 min-w-0`}
+                  style={gridType ? { gridArea: LAYOUT_CONFIG[gridType].areas[i] } : undefined}
+                >
+                  {uploadingIndex === i ? (
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                      <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : slot?.url ? (
+                    <img
+                      src={slot.url}
+                      alt="slot"
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Camera className="text-gray-400" />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
+
           <div className="mt-6 flex items-center gap-3">
             <p className="text-sm text-gray-500">
               각 프레임을 눌러 사진을 채워주세요!
@@ -491,7 +526,64 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
               프레임 바꾸기
             </button>
           </div>
+
+          {/* 테두리 색상 + 두께 선택 */}
+          <div className="mt-4 flex flex-col items-center gap-3">
+            <div className="flex items-center gap-3">
+              {(
+                [
+                  { key: "white" as const, bg: "#FFFFFF", border: true },
+                  { key: "black" as const, bg: "#000000" },
+                  { key: "palette" as const, bg: selectedApiPalette?.colors[Math.floor((selectedApiPalette?.colors.length ?? 0) / 2)]?.hex ?? "#e0e0e0", border: true },
+                ] as { key: "white" | "black" | "palette"; bg: string; border?: boolean }[]
+              ).map(({ key, bg, border }) => (
+                <button
+                  key={key}
+                  onClick={() => setFrameColor(key)}
+                  className={`w-7 h-7 rounded-full transition-all ${
+                    frameColor === key
+                      ? "ring-2 ring-offset-2 ring-gray-800 scale-110"
+                      : "opacity-60 hover:opacity-100"
+                  } ${border ? "border border-gray-300" : ""}`}
+                  style={{ backgroundColor: bg }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              {[
+                { key: "none" as const, p: 0, g: 0 },
+                { key: "thin" as const, p: 2, g: 1 },
+                { key: "medium" as const, p: 4, g: 2 },
+              ].map(({ key, p, g }) => (
+                <button
+                  key={key}
+                  onClick={() => setFrameThickness(key)}
+                  className={`p-1.5 rounded-xl border-2 transition-all ${
+                    frameThickness === key
+                      ? "border-gray-800 bg-gray-100 shadow-sm"
+                      : "border-gray-300 bg-white hover:border-gray-500"
+                  }`}
+                >
+                  {key === "none" ? (
+                    <div className="w-8 h-8 bg-gray-200 flex items-center justify-center rounded-sm relative">
+                      <div className="w-5 h-0.5 bg-gray-500 rounded-full rotate-45 absolute" />
+                      <div className="w-5 h-0.5 bg-gray-500 rounded-full -rotate-45 absolute" />
+                    </div>
+                  ) : (
+                    <div className="w-8 h-8 bg-gray-200 flex items-center justify-center rounded-sm overflow-hidden" style={{ padding: p }}>
+                      <div className="w-full h-full grid grid-cols-2 grid-rows-2" style={{ gap: g }}>
+                        {[0, 1, 2, 3].map((i) => (
+                          <div key={i} className="bg-gray-500 rounded-[1px]" />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
+
         <div className="p-6 pb-safe safe-area-bottom bg-white border-t border-gray-100">
           <Button
             size="lg"
@@ -542,43 +634,59 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
               ) : (
                 <>
                   <h2 className="text-xl font-black mb-4">프레임 수 변경</h2>
-                  <div className="flex flex-col gap-3">
-                    {[
-                      { type: "G2" as const, count: 4, cols: 2, rows: 2, label: "4장" },
-                      { type: "G6" as const, count: 6, cols: 2, rows: 3, label: "6장" },
-                      { type: "G3" as const, count: 9, cols: 3, rows: 3, label: "9장" },
-                    ].map(({ type, count, cols, rows, label }) => (
-                      <button
-                        key={type}
-                        onClick={async () => {
-                          await handleGridSelect(type);
-                          setFrameModalStep("closed");
-                        }}
-                        className={`w-full border-2 rounded-2xl p-4 flex items-center gap-5 transition-all ${
-                          gridType === type
-                            ? "border-black bg-gray-50"
-                            : "border-gray-100 hover:border-gray-200"
-                        }`}
-                      >
-                        <div
-                          className="grid gap-1 shrink-0"
-                          style={{
-                            gridTemplateColumns: `repeat(${cols}, 1fr)`,
-                            width: cols * 18 + (cols - 1) * 4,
-                            height: rows * 18 + (rows - 1) * 4,
-                          }}
-                        >
-                          {Array(count)
-                            .fill(0)
-                            .map((_, i) => (
-                              <div
-                                key={i}
-                                className="bg-gray-200 rounded w-[18px] h-[18px]"
-                              />
-                            ))}
+                  <div className="flex flex-col gap-4">
+                    {(
+                      [
+                        { countLabel: "4장", variants: ["G2", "G2_GRID"] as const },
+                        { countLabel: "6장", variants: ["G6", "G6_GRID"] as const },
+                        { countLabel: "9장", variants: ["G3", "G3_GRID"] as const },
+                      ] as const
+                    ).map(({ countLabel, variants }) => (
+                      <div key={countLabel}>
+                        <p className="text-xs font-bold text-gray-400 mb-2">{countLabel}</p>
+                        <div className="flex gap-2">
+                          {variants.map((type) => {
+                            const cfg = LAYOUT_CONFIG[type];
+                            const isSelected = gridType === type;
+                            return (
+                              <button
+                                key={type}
+                                onClick={async () => {
+                                  await handleGridSelect(type);
+                                  setFrameModalStep("closed");
+                                }}
+                                className={`flex-1 border-2 rounded-2xl p-3 flex flex-col items-center gap-2 transition-all ${
+                                  isSelected
+                                    ? "border-black bg-gray-50"
+                                    : "border-gray-100 hover:border-gray-300"
+                                }`}
+                              >
+                                <div
+                                  className="grid gap-[3px]"
+                                  style={{
+                                    gridTemplateAreas: cfg.previewAreas,
+                                    gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
+                                    gridTemplateRows: cfg.containerStyle.gridTemplateRows,
+                                    width: cfg.previewSize.width,
+                                    height: cfg.previewSize.height,
+                                  }}
+                                >
+                                  {cfg.previewCells.map((area) => (
+                                    <div
+                                      key={area}
+                                      className={`rounded-[2px] ${isSelected ? "bg-gray-400" : "bg-gray-200"}`}
+                                      style={{ gridArea: area }}
+                                    />
+                                  ))}
+                                </div>
+                                <span className={`text-xs font-bold ${isSelected ? "text-gray-900" : "text-gray-400"}`}>
+                                  {cfg.label}
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
-                        <span className="font-black text-lg">{label}</span>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </>
@@ -595,110 +703,174 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   // ════════════════════════════════════════════════════════════════════════
 
   if (step === 4) {
-    const resultColor = selectedApiPalette?.colors[0]?.hex ?? "#6366f1";
-    const gridClass =
-      gridType === "G3"
-        ? "grid-cols-3 grid-rows-3"
-        : gridType === "G6"
-        ? "grid-cols-2 grid-rows-3"
-        : "grid-cols-2 grid-rows-2";
-    const aspectClass = gridType === "G6" ? "aspect-[2/3]" : "aspect-square";
+    const layoutCfg = gridType ? LAYOUT_CONFIG[gridType] : null;
 
-    const thicknessConfig = {
-      none:   { pad: 0,  gap: 0,  cssPad: "p-0",   cssGap: "gap-0",   rounded: "rounded-none" },
-      thin:   { pad: 8,  gap: 3,  cssPad: "p-1.5", cssGap: "gap-0.5", rounded: "rounded-lg" },
-      medium: { pad: 20, gap: 8,  cssPad: "p-3",   cssGap: "gap-1",   rounded: "rounded-xl" },
-    } as const;
-    const tc = thicknessConfig[frameThickness];
+    const buildCanvas = async (): Promise<Blob | null> => {
+      const bgHex = frameColorHex;
+      const OUTPUT_WIDTH = 1080;
+      const PADDING = tc.pad;
+      const GRID_GAP = tc.gap;
+
+      const getLayoutCells = (gt: GridLayoutType) => {
+        const gw = OUTPUT_WIDTH - 2 * PADDING;
+        if (gt === "G2_GRID") {
+          const col = Math.floor((gw - GRID_GAP) / 2);
+          const col1 = gw - col - GRID_GAP;
+          const row = col;
+          return [
+            { x: PADDING,               y: PADDING,               w: col,  h: row },
+            { x: PADDING+col+GRID_GAP,  y: PADDING,               w: col1, h: row },
+            { x: PADDING,               y: PADDING+row+GRID_GAP,  w: col,  h: row },
+            { x: PADDING+col+GRID_GAP,  y: PADDING+row+GRID_GAP,  w: col1, h: row },
+          ];
+        } else if (gt === "G6_GRID") {
+          const col = Math.floor((gw - GRID_GAP) / 2);
+          const col1 = gw - col - GRID_GAP;
+          const row = Math.floor((col * 3 - 2 * GRID_GAP) / 3);
+          const cells = [];
+          for (let r = 0; r < 3; r++)
+            for (let c = 0; c < 2; c++)
+              cells.push({ x: PADDING + c*(col+GRID_GAP), y: PADDING + r*(row+GRID_GAP), w: c===0?col:col1, h: row });
+          return cells;
+        } else if (gt === "G3_GRID") {
+          const col = Math.floor((gw - 2 * GRID_GAP) / 3);
+          const colR = gw - 2*col - 2*GRID_GAP;
+          const cells = [];
+          for (let r = 0; r < 3; r++)
+            for (let c = 0; c < 3; c++) {
+              const w = c === 2 ? colR : col;
+              cells.push({ x: PADDING + c*(col+GRID_GAP), y: PADDING + r*(col+GRID_GAP), w, h: col });
+            }
+          return cells;
+        } else if (gt === "G2") {
+          const col = Math.floor((gw - 2 * GRID_GAP) / 3);
+          const colR = gw - 2 * col - 2 * GRID_GAP;
+          const px0 = PADDING, px1 = PADDING + col + GRID_GAP, px2 = PADDING + 2 * (col + GRID_GAP);
+          const py0 = PADDING, py1 = PADDING + col + GRID_GAP;
+          return [
+            { x: px0, y: py0, w: col * 2 + GRID_GAP, h: col },
+            { x: px2, y: py0, w: colR, h: col },
+            { x: px0, y: py1, w: col, h: col },
+            { x: px1, y: py1, w: col + GRID_GAP + colR, h: col },
+          ];
+        } else if (gt === "G6") {
+          const col = Math.floor((gw - 2 * GRID_GAP) / 3);
+          const colR = gw - 2 * col - 2 * GRID_GAP;
+          const px0 = PADDING, px1 = PADDING + col + GRID_GAP, px2 = PADDING + 2 * (col + GRID_GAP);
+          const py0 = PADDING, py1 = PADDING + col + GRID_GAP, py2 = PADDING + 2 * (col + GRID_GAP);
+          return [
+            { x: px0, y: py0, w: col, h: col },
+            { x: px1, y: py0, w: col, h: col },
+            { x: px2, y: py0, w: colR, h: col },
+            { x: px0, y: py1, w: col * 2 + GRID_GAP, h: col * 2 + GRID_GAP },
+            { x: px2, y: py1, w: colR, h: col },
+            { x: px2, y: py2, w: colR, h: col },
+          ];
+        } else {
+          // G3
+          const col = Math.floor((gw - 3 * GRID_GAP) / 4);
+          const px0 = PADDING, px1 = PADDING + col + GRID_GAP, px2 = PADDING + 2*(col+GRID_GAP), px3 = PADDING + 3*(col+GRID_GAP);
+          const py0 = PADDING, py1 = PADDING + col + GRID_GAP, py2 = PADDING + 2*(col+GRID_GAP);
+          const wide = col * 2 + GRID_GAP;
+          return [
+            { x: px0, y: py0, w: wide, h: col },
+            { x: px2, y: py0, w: col,  h: col },
+            { x: px3, y: py0, w: col,  h: col },
+            { x: px0, y: py1, w: col,  h: col },
+            { x: px1, y: py1, w: wide, h: col },
+            { x: px3, y: py1, w: col,  h: col },
+            { x: px0, y: py2, w: col,  h: col },
+            { x: px1, y: py2, w: col,  h: col },
+            { x: px2, y: py2, w: wide, h: col },
+          ];
+        }
+      };
+
+      const cells = getLayoutCells(gridType!);
+      const maxBottom = Math.max(...cells.map((c) => c.y + c.h));
+      const outputHeight = maxBottom + PADDING;
+
+      const images = await Promise.all(
+        slots.map(async (slot) => {
+          if (!slot?.url) return null;
+          try {
+            const res = await fetch(slot.url);
+            const blob = await res.blob();
+            const objUrl = URL.createObjectURL(blob);
+            const img = new Image();
+            img.src = objUrl;
+            await new Promise<void>((resolve, reject) => {
+              img.onload = () => resolve();
+              img.onerror = reject;
+            });
+            URL.revokeObjectURL(objUrl);
+            return img;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const canvas = document.createElement("canvas");
+      canvas.width = OUTPUT_WIDTH;
+      canvas.height = outputHeight;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = bgHex;
+      ctx.fillRect(0, 0, OUTPUT_WIDTH, outputHeight);
+
+      images.forEach((img, i) => {
+        if (!img || !cells[i]) return;
+        const { x, y, w, h } = cells[i];
+        const srcAspect = img.naturalWidth / img.naturalHeight;
+        const targetAspect = w / h;
+        let sx: number, sy: number, sw: number, sh: number;
+        if (srcAspect > targetAspect) {
+          sh = img.naturalHeight;
+          sw = sh * targetAspect;
+          sy = 0;
+          sx = (img.naturalWidth - sw) / 2;
+        } else {
+          sw = img.naturalWidth;
+          sh = sw / targetAspect;
+          sx = 0;
+          sy = (img.naturalHeight - sh) / 2;
+        }
+        ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+      });
+
+      return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    };
 
     const handleDownload = async () => {
       if (isDownloading || slots.filter(Boolean).length === 0) return;
       setIsDownloading(true);
       try {
-        const bgHex =
-          frameColor === "black"
-            ? "#000000"
-            : frameColor === "palette"
-            ? resultColor
-            : "#FFFFFF";
+        const blob = await buildCanvas();
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `colorwork_${projectId}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } finally {
+        setIsDownloading(false);
+      }
+    };
 
-        const OUTPUT_WIDTH = 1080;
-        const PADDING = tc.pad;
-        const GRID_GAP = tc.gap;
-        const cols = gridType === "G3" ? 3 : 2;
-        const rows = gridType === "G6" ? 3 : gridType === "G2" ? 2 : 3;
-        const cellWidth =
-          (OUTPUT_WIDTH - 2 * PADDING - (cols - 1) * GRID_GAP) / cols;
-        const cellHeight = cellWidth;
-        const outputHeight =
-          rows * cellHeight + (rows - 1) * GRID_GAP + 2 * PADDING;
-
-        const images = await Promise.all(
-          slots.map(async (slot) => {
-            if (!slot?.url) return null;
-            try {
-              const res = await fetch(slot.url);
-              const blob = await res.blob();
-              const objUrl = URL.createObjectURL(blob);
-              const img = new Image();
-              img.src = objUrl;
-              await new Promise<void>((resolve, reject) => {
-                img.onload = () => resolve();
-                img.onerror = reject;
-              });
-              URL.revokeObjectURL(objUrl);
-              return img;
-            } catch {
-              return null;
-            }
-          })
-        );
-
-        const canvas = document.createElement("canvas");
-        canvas.width = OUTPUT_WIDTH;
-        canvas.height = outputHeight;
-        const ctx = canvas.getContext("2d")!;
-        ctx.fillStyle = bgHex;
-        ctx.fillRect(0, 0, OUTPUT_WIDTH, outputHeight);
-
-        images.forEach((img, i) => {
-          if (!img) return;
-          const col = i % cols;
-          const row = Math.floor(i / cols);
-          const x = PADDING + col * (cellWidth + GRID_GAP);
-          const y = PADDING + row * (cellHeight + GRID_GAP);
-
-          const srcAspect = img.naturalWidth / img.naturalHeight;
-          let sx: number, sy: number, sw: number, sh: number;
-          if (srcAspect > 1) {
-            sh = img.naturalHeight;
-            sw = sh;
-            sy = 0;
-            sx = (img.naturalWidth - sw) / 2;
-          } else {
-            sw = img.naturalWidth;
-            sh = sw;
-            sx = 0;
-            sy = (img.naturalHeight - sh) / 2;
-          }
-          ctx.drawImage(img, sx, sy, sw, sh, x, y, cellWidth, cellHeight);
-        });
-
-        canvas.toBlob(async (b) => {
-          if (!b) return;
-          const fileName = `colorwork_${projectId}.png`;
-          const file = new File([b], fileName, { type: "image/png" });
-          if (navigator.canShare?.({ files: [file] })) {
-            await navigator.share({ files: [file], title: "컬러워크" });
-          } else {
-            const url = URL.createObjectURL(b);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = fileName;
-            a.click();
-            URL.revokeObjectURL(url);
-          }
-        }, "image/png");
+    const handleShare = async () => {
+      if (isDownloading || slots.filter(Boolean).length === 0) return;
+      setIsDownloading(true);
+      try {
+        const blob = await buildCanvas();
+        if (!blob) return;
+        const file = new File([blob], `colorwork_${projectId}.png`, { type: "image/png" });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: "컬러워크" });
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
+        throw e;
       } finally {
         setIsDownloading(false);
       }
@@ -712,21 +884,21 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
             {initialStep === 4 ? (
               <button
                 onClick={() => router.push("/recent")}
-                className="p-2 -ml-2 rounded-full hover:bg-white/20 transition-colors"
+                className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"
               >
                 <ChevronLeft />
               </button>
             ) : (
               <button
                 onClick={() => setStep(3)}
-                className="p-2 -ml-2 rounded-full hover:bg-white/20 transition-colors"
+                className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"
               >
                 <ChevronLeft />
               </button>
             )}
             <button
               onClick={openMenu}
-              className="p-2 hover:bg-white/20 rounded-full transition-colors"
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
             >
               <Menu size={22} />
             </button>
@@ -736,30 +908,35 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
         </div>
 
         <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto no-scrollbar">
+          {/* 결과 미리보기 */}
           <div
-            className={`${tc.cssPad} ${tc.rounded} shadow-2xl mb-4 w-full max-w-[320px] flex flex-col relative overflow-hidden ring-4 ring-white/20 ${aspectClass}`}
+            className={`${tc.rounded} shadow-2xl mb-4 w-full max-w-[320px] relative overflow-hidden ring-4 ring-white/20`}
             style={{
-              backgroundColor:
-                frameColor === "black"
-                  ? "#000000"
-                  : frameColor === "palette"
-                  ? resultColor
-                  : "#FFFFFF",
+              aspectRatio: layoutCfg?.containerStyle.aspectRatio ?? "1/1",
+              backgroundColor: frameColorHex,
             }}
           >
             <div
-              className={`w-full h-full grid overflow-hidden ${tc.cssGap} ${gridClass}`}
+              className="absolute inset-0 grid overflow-hidden"
+              style={{
+                gridTemplateAreas: layoutCfg?.containerStyle.gridTemplateAreas,
+                gridTemplateColumns: layoutCfg?.containerStyle.gridTemplateColumns,
+                gridTemplateRows: layoutCfg?.containerStyle.gridTemplateRows,
+                gap: `${tc.gap}px`,
+                padding: `${tc.pad}px`,
+              }}
             >
               {slots.map((slot, i) => (
                 <div
                   key={i}
-                  className="relative w-full h-full bg-gray-200 overflow-hidden"
+                  className="relative min-h-0 min-w-0 bg-gray-200 overflow-hidden"
+                  style={{ gridArea: layoutCfg ? LAYOUT_CONFIG[gridType!].areas[i] : undefined }}
                 >
                   {slot?.url && (
                     <img
                       src={slot.url}
                       alt="filled slot"
-                      className="w-full h-full object-cover"
+                      className="absolute inset-0 w-full h-full object-cover"
                     />
                   )}
                 </div>
@@ -767,75 +944,38 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
             </div>
           </div>
 
-          <p className="text-gray-500 text-sm font-medium text-center">
+          <p className="text-gray-500 text-sm font-medium text-center mt-1">
             #컬러워크 #{selectedApiPalette?.colors[0]?.name ?? "mood"} #
             {slots.length}cuts
           </p>
-
-          <div className="flex items-center gap-3 mt-3">
-            {(
-              [
-                { key: "white" as const, bg: "#FFFFFF", border: true },
-                { key: "black" as const, bg: "#000000" },
-                { key: "palette" as const, bg: resultColor, border: true },
-              ] as { key: "white" | "black" | "palette"; bg: string; border?: boolean }[]
-            ).map(({ key, bg, border }) => (
-              <button
-                key={key}
-                onClick={() => setFrameColor(key)}
-                className={`w-7 h-7 rounded-full transition-all ${
-                  frameColor === key ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : "opacity-70"
-                } ${border ? "border border-gray-300" : ""}`}
-                style={{ backgroundColor: bg }}
-              />
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2 mt-3">
-              {(
-                [
-                  { key: "none" as const, p: 0, g: 0 },
-                  { key: "thin" as const, p: 2, g: 1 },
-                  { key: "medium" as const, p: 4, g: 2 },
-                ]
-              ).map(({ key, p, g }) => (
-                <button
-                  key={key}
-                  onClick={() => setFrameThickness(key)}
-                  className={`p-1.5 rounded-xl border-2 transition-all ${
-                    frameThickness === key ? "border-gray-700 bg-gray-50" : "border-gray-200"
-                  }`}
-                >
-                  <div
-                    className="w-8 h-8 bg-gray-300 flex items-center justify-center"
-                    style={{ padding: p }}
-                  >
-                    <div
-                      className="w-full h-full grid grid-cols-2 grid-rows-2"
-                      style={{ gap: g }}
-                    >
-                      {[0,1,2,3].map(i => (
-                        <div key={i} className="bg-gray-600 rounded-[1px]" />
-                      ))}
-                    </div>
-                  </div>
-                </button>
-              ))}
-          </div>
         </div>
 
-        <div className="p-6 pb-safe safe-area-bottom space-y-3">
-          <Button
-            size="lg"
-            icon={Download}
-            loading={isDownloading}
-            onClick={handleDownload}
-          >
-            다운로드
-          </Button>
+        <div className="p-6 pb-safe safe-area-bottom space-y-3 bg-white border-t border-gray-100">
+          <div className="flex gap-3">
+            <button
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className="flex-1 flex items-center justify-center gap-2 py-4 bg-black text-white font-medium rounded-xl shadow-xl hover:bg-gray-900 active:scale-95 transition-all disabled:opacity-50 text-base"
+            >
+              {isDownloading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Download size={18} />
+              )}
+              다운로드
+            </button>
+            <button
+              onClick={handleShare}
+              disabled={isDownloading}
+              className="flex-1 flex items-center justify-center gap-2 py-4 bg-white text-black font-medium rounded-xl shadow border border-gray-200 hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-50 text-base"
+            >
+              <Share2 size={18} />
+              공유
+            </button>
+          </div>
           <button
             onClick={() => router.replace("/")}
-            className="w-full py-3 text-gray-500 text-sm font-bold hover:text-gray-700"
+            className="w-full py-3 text-gray-500 text-sm font-bold hover:text-gray-800 transition-colors"
           >
             홈으로
           </button>

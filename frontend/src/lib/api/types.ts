@@ -49,6 +49,7 @@ export interface ProjectResponse {
   paletteColor?: string;
   ownerId?: number;
   frameUrls?: string[];
+  gridType?: string; // "G2" | "G6" | "G3"
 }
 
 // Colorwork

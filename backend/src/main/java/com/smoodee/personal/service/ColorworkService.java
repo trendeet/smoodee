@@ -17,7 +17,11 @@ import com.smoodee.project.domain.Project;
 import com.smoodee.project.domain.ProjectStatus;
 import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.service.ProjectService;
+import com.smoodee.storage.service.StorageService;
+import org.springframework.web.multipart.MultipartFile;
 import com.smoodee.template.domain.TemplateType;
+import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +43,7 @@ public class ColorworkService {
   private final PersonalFrameRepository frameRepository;
   private final AssetService assetService;
   private final ObjectMapper objectMapper;
+  private final StorageService storageService;
 
   @Transactional
   public Project createColorworkProject(Long userId) {
@@ -62,7 +67,7 @@ public class ColorworkService {
   @Transactional
   public void completeProject(Long projectId, Long userId) {
     Project project = projectService.getProject(projectId);
-    projectService.requireOwner(project, userId);
+    if (userId != null) projectService.requireOwner(project, userId);
     project.transitionTo(ProjectStatus.DONE);
     projectService.save(project);
   }
@@ -218,12 +223,40 @@ public class ColorworkService {
   }
 
   @Transactional(readOnly = true)
-  public String getThumbnailUrl(Long projectId, Long userId) {
-    return frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
-        .filter(f -> f.getAssetId() != null)
-        .findFirst()
-        .map(f -> assetService.generateDownloadUrl(f.getAssetId(), userId))
+  public String getGridType(Long projectId) {
+    return configRepository
+        .findByProjectId(projectId)
+        .map(config -> config.getGridType() != null ? config.getGridType().name() : null)
         .orElse(null);
+  }
+
+  @Transactional
+  public void storeThumbnail(Long projectId, Long userId, MultipartFile file) {
+    Project project = projectService.getProject(projectId);
+    if (userId != null) projectService.requireOwner(project, userId);
+    PersonalColorworkConfig config = getConfig(projectId);
+    String s3Key = String.format("thumbnails/%d/thumbnail.png", projectId);
+    try {
+      storageService.put(file.getInputStream(), s3Key, "image/png", file.getSize());
+    } catch (IOException e) {
+      throw new BusinessException(ErrorCode.INVALID_INPUT);
+    }
+    config.updateThumbnailKey(s3Key);
+  }
+
+  @Transactional(readOnly = true)
+  public String getThumbnailUrl(Long projectId, Long userId) {
+    return configRepository
+        .findByProjectId(projectId)
+        .filter(c -> c.getThumbnailS3Key() != null)
+        .map(c -> storageService.presignGet(c.getThumbnailS3Key(), Duration.ofDays(7)))
+        .orElseGet(() ->
+            frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
+                .filter(f -> f.getAssetId() != null)
+                .findFirst()
+                .map(f -> assetService.generateDownloadUrl(f.getAssetId(), userId))
+                .orElse(null)
+        );
   }
 
   @Transactional(readOnly = true)
