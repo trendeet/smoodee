@@ -48,31 +48,29 @@ const SettingsScreen = () => {
         <section>
           <h3 className="text-xs font-bold text-gray-500 mb-2 ml-1">앱 설정</h3>
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-            <div className="flex items-center justify-between p-4 border-b border-gray-50">
+            <div className="flex items-center justify-between p-4 border-b border-gray-50 opacity-40">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
                   <Bell size={18} />
                 </div>
-                <span className="font-bold text-sm text-gray-700">알림</span>
+                <div>
+                  <span className="font-bold text-sm text-gray-700">알림</span>
+                  <p className="text-xs text-gray-400">준비 중인 기능이에요</p>
+                </div>
               </div>
-              <Switch
-                checked={settings.notifications}
-                onChange={() => toggleSetting("notifications")}
-              />
+              <Switch checked={false} onChange={() => {}} disabled />
             </div>
-            <div className="flex items-center justify-between p-4">
+            <div className="flex items-center justify-between p-4 opacity-40">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
                   <Moon size={18} />
                 </div>
-                <span className="font-bold text-sm text-gray-700">
-                  다크 모드
-                </span>
+                <div>
+                  <span className="font-bold text-sm text-gray-700">다크 모드</span>
+                  <p className="text-xs text-gray-400">준비 중인 기능이에요</p>
+                </div>
               </div>
-              <Switch
-                checked={settings.darkMode}
-                onChange={() => toggleSetting("darkMode")}
-              />
+              <Switch checked={false} onChange={() => {}} disabled />
             </div>
           </div>
         </section>

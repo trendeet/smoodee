@@ -3,9 +3,10 @@ package com.smoodee.global.security;
 import com.smoodee.auth.service.AuthService;
 import com.smoodee.user.domain.User;
 import com.smoodee.user.service.UserService;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import java.io.IOException;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -47,11 +48,14 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
     String refreshToken = authService.createAndSaveRefreshToken(user.getId());
     String accessToken = jwtProvider.generateAccessToken(user.getId());
 
-    Cookie refreshCookie = new Cookie("refreshToken", refreshToken);
-    refreshCookie.setHttpOnly(true);
-    refreshCookie.setPath("/");
-    refreshCookie.setMaxAge((int) (refreshTokenExpiryMs / 1000));
-    response.addCookie(refreshCookie);
+    ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshToken)
+        .httpOnly(true)
+        .secure(true)
+        .sameSite("None")
+        .path("/")
+        .maxAge(refreshTokenExpiryMs / 1000)
+        .build();
+    response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
 
     log.info("OAuth2 login success: userId={}", user.getId());
     response.sendRedirect(frontendRedirectUri + "?accessToken=" + accessToken);

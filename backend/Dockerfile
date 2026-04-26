@@ -1,27 +1,40 @@
-FROM amazoncorretto:17-alpine AS build
-WORKDIR /app
+FROM eclipse-temurin:17-jdk-jammy AS builder
+WORKDIR /workspace
+
 COPY gradlew .
-COPY gradle gradle
+COPY gradle ./gradle
 COPY build.gradle .
 COPY settings.gradle .
-COPY src src
-RUN chmod +x gradlew && ./gradlew bootJar -x test --no-daemon
+RUN chmod +x gradlew && sed -i 's/\r$//' gradlew
+RUN ./gradlew dependencies --no-daemon -q 2>/dev/null || true
 
-FROM amazoncorretto:17-alpine
+COPY src ./src
+COPY scripts ./scripts
+RUN ./gradlew bootJar --no-daemon -x test -x spotlessCheck
+
+FROM eclipse-temurin:17-jre-jammy AS runtime
 WORKDIR /app
 
-# 영상 렌더링 의존성 설치
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     python3 \
-    py3-pip \
-    font-noto \
-    font-noto-cjk \
-    && pip3 install --no-cache-dir pillow pilmoji --break-system-packages
+    python3-pip \
+    fonts-nanum \
+    fonts-noto-cjk \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# 텍스트 렌더 스크립트 복사
-COPY scripts/ scripts/
+RUN pip3 install --no-cache-dir pilmoji pillow
 
-COPY --from=build /app/build/libs/*.jar app.jar
+COPY --from=builder /workspace/build/libs/*.jar app.jar
+COPY --from=builder /workspace/scripts ./scripts
+
+ENV EMOJI_CACHE_DIR=/app/.cache/smoodee_emoji
+ENV SPRING_PROFILES_ACTIVE=prod
+
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "-Dspring.profiles.active=prod", "app.jar"]
+
+ENTRYPOINT ["java", \
+  "-Xms256m", "-Xmx1g", \
+  "-Djava.awt.headless=true", \
+  "-jar", "app.jar"]
