@@ -37,12 +37,12 @@ aws ecr get-login-password --region $REGION --profile $AWS_PROFILE | \
 
 # ── 백엔드 이미지 빌드 & 푸시 ────────────────────────────
 echo "🏗️  백엔드 빌드 중... (첫 빌드는 5~10분 소요)"
-docker build -t "$ECR_BACKEND:latest" ./backend
+docker build --platform linux/amd64 -t "$ECR_BACKEND:latest" ./backend
 docker push "$ECR_BACKEND:latest"
 
 # ── 프론트엔드 이미지 빌드 & 푸시 ────────────────────────
 echo "🏗️  프론트엔드 빌드 중..."
-docker build \
+docker build --platform linux/amd64 \
   --build-arg "NEXT_PUBLIC_API_BASE_URL=${APP_DOMAIN}" \
   --build-arg "NEXT_PUBLIC_GEMINI_API_KEY=" \
   -t "$ECR_FRONTEND:latest" \
