@@ -4,7 +4,13 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 
 // Safari는 currentTime 설정 후 seeked 이벤트 없이 프레임을 렌더링하지 않음.
 // canvas로 캡처해 <img>로 교체하면 모든 브라우저에서 안정적으로 썸네일 표시.
-function VideoThumbnail({ src, className }: { src: string; className?: string }) {
+function VideoThumbnail({
+  src,
+  className,
+}: {
+  src: string;
+  className?: string;
+}) {
   const [thumb, setThumb] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -550,7 +556,8 @@ const GroupScreen = () => {
     totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0;
   const isAllFilled = groupProgressPercent === 100;
   const displayName = group?.name ?? selectedGroup.name;
-  const memberCount = members.length > 0 ? members.length : (group?.memberCount ?? 1);
+  const memberCount =
+    members.length > 0 ? members.length : group?.memberCount ?? 1;
 
   return (
     <div
@@ -923,10 +930,10 @@ const GroupScreen = () => {
               </span>
             </button>
           </div>
-          <p className="text-[10px] font-bold text-red-400 mt-2 px-1">
+          {/* <p className="text-[10px] font-bold text-red-400 mt-2 px-1">
             * 초대 코드는 메뉴 → 진행중인 템플릿 → 그룹 창에서 입력할 수
             있습니다.
-          </p>
+          </p> */}
         </div>
 
         {/* Tab switcher */}
@@ -1076,7 +1083,6 @@ const GroupScreen = () => {
               </button>
             )}
           </div>
-
 
           {/* 멤버별 진행률 */}
           <div className="mx-4 mt-4">
