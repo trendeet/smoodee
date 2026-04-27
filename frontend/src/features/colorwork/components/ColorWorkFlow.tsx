@@ -1709,12 +1709,22 @@ const ColorWorkFlow = () => {
       try {
         const blob = await buildCanvas();
         if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `colorwork_${projectId ?? Date.now()}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
+        const fileName = `colorwork_${projectId ?? Date.now()}.png`;
+        const file = new File([blob], fileName, { type: "image/png" });
+        // 모바일: Share API로 사진첩 저장 유도
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: "컬러워크" });
+        } else {
+          // 데스크탑: 기존 다운로드
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = fileName;
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
       } finally {
         setIsDownloading(false);
       }
