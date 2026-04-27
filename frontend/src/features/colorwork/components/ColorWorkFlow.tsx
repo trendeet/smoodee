@@ -1145,23 +1145,27 @@ const ColorWorkFlow = () => {
           </div>
         </div>
         <div className="px-6 pt-6 pb-2">
-          <button
-            onClick={() => setShowLeaveConfirm(true)}
-            className="mb-6 p-2 -ml-2 rounded-full hover:bg-gray-100 w-fit transition-colors"
-          >
-            <ChevronLeft />
-          </button>
-          <h1 className="text-3xl font-black leading-tight text-gray-900 mb-2 tracking-tight">
-            오늘 당신의
-            <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
-              무드
-            </span>
-            는 어떤가요?
-          </h1>
-          <p className="text-gray-500 text-sm font-medium">
-            가장 끌리는 팔레트를 선택해주세요.
-          </p>
+          <div className="flex items-start gap-2">
+            <button
+              onClick={() => setShowLeaveConfirm(true)}
+              className="mt-1 p-2 -ml-2 rounded-full hover:bg-gray-100 shrink-0 transition-colors"
+            >
+              <ChevronLeft />
+            </button>
+            <div>
+              <h1 className="text-3xl font-black leading-tight text-gray-900 mb-2 tracking-tight">
+                오늘 당신의
+                <br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
+                  무드
+                </span>
+                는 어떤가요?
+              </h1>
+              <p className="text-gray-500 text-sm font-medium">
+                가장 끌리는 팔레트를 선택해주세요.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="flex-1 px-6 flex flex-col justify-center py-6">
@@ -1219,18 +1223,22 @@ const ColorWorkFlow = () => {
           <span className="text-xl font-black tracking-tight">Smoodee</span>
         </div>
         <div className="px-6 pt-6 pb-6">
-          <button
-            onClick={() => setStep(1)}
-            className="mb-6 p-2 -ml-2 rounded-full hover:bg-gray-100 w-fit"
-          >
-            <ChevronLeft />
-          </button>
-          <h1 className="text-3xl font-black mb-2">
-            몇 장의 사진을
-            <br />
-            담을까요?
-          </h1>
-          <p className="text-gray-500">원하는 레이아웃을 선택해주세요.</p>
+          <div className="flex items-start gap-2">
+            <button
+              onClick={() => setStep(1)}
+              className="mt-1 p-2 -ml-2 rounded-full hover:bg-gray-100 shrink-0"
+            >
+              <ChevronLeft />
+            </button>
+            <div>
+              <h1 className="text-3xl font-black mb-2">
+                몇 장의 사진을
+                <br />
+                담을까요?
+              </h1>
+              <p className="text-gray-500">원하는 레이아웃을 선택해주세요.</p>
+            </div>
+          </div>
         </div>
         <div className="flex-1 px-6 py-4 flex flex-col gap-5 overflow-y-auto no-scrollbar">
           {(
