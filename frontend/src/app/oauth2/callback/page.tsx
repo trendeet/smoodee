@@ -20,7 +20,7 @@ function CallbackHandler() {
   }, [searchParams, login, router]);
 
   return (
-    <div className="flex h-screen items-center justify-center">
+    <div className="flex h-[100dvh] items-center justify-center">
       <p className="text-sm text-gray-500">로그인 처리 중...</p>
     </div>
   );
@@ -30,7 +30,7 @@ export default function OAuth2CallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-screen items-center justify-center">
+        <div className="flex h-[100dvh] items-center justify-center">
           <p className="text-sm text-gray-500">로그인 처리 중...</p>
         </div>
       }
