@@ -1232,7 +1232,7 @@ const ColorWorkFlow = () => {
           </h1>
           <p className="text-gray-500">원하는 레이아웃을 선택해주세요.</p>
         </div>
-        <div className="flex-1 px-6 flex flex-col justify-center gap-5 overflow-y-auto no-scrollbar">
+        <div className="flex-1 px-6 py-4 flex flex-col gap-5 overflow-y-auto no-scrollbar">
           {(
             [
               { countLabel: "4장", variants: ["G2", "G2_GRID"] as const },
