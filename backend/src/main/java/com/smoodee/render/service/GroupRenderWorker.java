@@ -407,6 +407,7 @@ public class GroupRenderWorker {
       case "image/jpeg", "image/jpg" -> ".jpg";
       case "image/png" -> ".png";
       case "image/gif" -> ".gif";
+      case "image/webp" -> ".webp";
       case "image/heic", "image/heif", "image/heic-sequence" -> ".heic";
       default -> ".bin";
     };
