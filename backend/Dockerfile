@@ -37,4 +37,5 @@ EXPOSE 8080
 ENTRYPOINT ["java", \
   "-Xms256m", "-Xmx1g", \
   "-Djava.awt.headless=true", \
+  "-Duser.timezone=Asia/Seoul", \
   "-jar", "app.jar"]
