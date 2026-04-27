@@ -13,8 +13,10 @@ import com.smoodee.slot.domain.SlotUploadStatus;
 import com.smoodee.slot.repository.SlotRepository;
 import com.smoodee.slot.repository.SlotUploadRepository;
 import com.smoodee.storage.service.StorageService;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -174,6 +177,9 @@ public class GroupRenderWorker {
                 jobId,
                 slot.getId(),
                 i);
+        if (file.toString().endsWith(".heic")) {
+          file = convertHeicToJpeg(file, tempDir, jobId, slot.getId(), i);
+        }
         if (isImage) {
           inputArgs.add("-loop");
           inputArgs.add("1");
@@ -401,8 +407,29 @@ public class GroupRenderWorker {
       case "image/jpeg", "image/jpg" -> ".jpg";
       case "image/png" -> ".png";
       case "image/gif" -> ".gif";
+      case "image/heic", "image/heif", "image/heic-sequence" -> ".heic";
       default -> ".bin";
     };
+  }
+
+  private Path convertHeicToJpeg(Path heicFile, Path tempDir, long jobId, long slotId, int index)
+      throws Exception {
+    Path jpegFile = tempDir.resolve(String.format("asset_%d_%d_%d.jpg", jobId, slotId, index));
+    List<String> cmd = List.of(
+        "python3", "-c",
+        "import pillow_heif; pillow_heif.register_heif_opener(); "
+            + "from PIL import Image; "
+            + "img = Image.open('" + heicFile.toAbsolutePath() + "'); "
+            + "img.save('" + jpegFile.toAbsolutePath() + "', 'JPEG')"
+    );
+    ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
+    Process process = pb.start();
+    String out = new String(process.getInputStream().readAllBytes());
+    int code = process.waitFor();
+    if (code != 0) {
+      throw new IllegalStateException("HEIC→JPEG 변환 실패: " + out);
+    }
+    return jpegFile;
   }
 
   private static final String FFMPEG =
@@ -455,12 +482,32 @@ public class GroupRenderWorker {
     log.debug("FFmpeg command: {}", String.join(" ", cmd));
     ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
     Process process = pb.start();
-    String output = new String(process.getInputStream().readAllBytes());
-    int exitCode = process.waitFor();
+
+    StringBuilder output = new StringBuilder();
+    Thread reader = new Thread(() -> {
+      try (BufferedReader br = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+        String line;
+        while ((line = br.readLine()) != null) {
+          output.append(line).append("\n");
+        }
+      } catch (Exception ignored) {}
+    });
+    reader.setDaemon(true);
+    reader.start();
+
+    boolean finished = process.waitFor(5, TimeUnit.MINUTES);
+    if (!finished) {
+      process.destroyForcibly();
+      throw new IllegalStateException("FFmpeg timeout (5분 초과)");
+    }
+    reader.join(1000);
+
+    int exitCode = process.exitValue();
     if (exitCode != 0) {
-      log.error("FFmpeg failed (exit={}): {}", exitCode, output);
+      String out = output.toString();
+      log.error("FFmpeg failed (exit={}): {}", exitCode, out);
       throw new IllegalStateException(
-          "FFmpeg 처리 실패: " + output.substring(Math.max(0, output.length() - 500)));
+          "FFmpeg 처리 실패: " + out.substring(Math.max(0, out.length() - 500)));
     }
   }
 

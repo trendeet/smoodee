@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir pilmoji pillow
+RUN pip3 install --no-cache-dir pilmoji pillow pillow-heif
 
 COPY --from=builder /workspace/build/libs/*.jar app.jar
 COPY --from=builder /workspace/scripts ./scripts
