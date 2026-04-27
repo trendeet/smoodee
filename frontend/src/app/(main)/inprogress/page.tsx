@@ -20,10 +20,8 @@ import {
 import StatusBar from "@/components/ui/StatusBar";
 import Toast from "@/components/ui/Toast";
 import TemplateCard from "@/features/templates/components/TemplateCard";
-import GroupScreen from "@/features/dayshare/components/GroupScreen";
 import { useProjects } from "@/hooks/useProjects";
 import { useTemplates } from "@/hooks/useTemplates";
-import { useApp } from "@/lib/context/AppContext";
 import { useUI } from "@/lib/context/UIContext";
 import { useAuth } from "@/lib/context/AuthContext";
 import { projectService } from "@/lib/api/projectService";
@@ -97,7 +95,6 @@ const InProgressPage = () => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { selectedGroup, setSelectedGroup } = useApp();
   const { openMenu } = useUI();
   const { userProfile } = useAuth();
 
@@ -134,10 +131,6 @@ const InProgressPage = () => {
   } = useProjects({ type: "GROUP", tab: "IN_PROGRESS" });
 
   const { data: groupTemplates = [] } = useTemplates();
-
-  if (selectedGroup) {
-    return <GroupScreen />;
-  }
 
   const handleGroupCardClick = (project: { id: number; groupId?: number; title: string }) => {
     if (!project.groupId) return;
