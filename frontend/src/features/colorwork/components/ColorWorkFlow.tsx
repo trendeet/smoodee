@@ -227,10 +227,8 @@ const ColorWorkFlow = () => {
         try {
           await colorworkService.selectGrid(
             pid,
-            LAYOUT_CONFIG[gridType].backendType
+            gridType
           );
-          // 격자 여부를 localStorage에 저장 (백엔드는 G2/G6/G3만 구분)
-          localStorage.setItem(`cw_grid_${pid}`, gridType);
         } catch {}
       }
       if (updateUrl) router.replace(`/colorwork?projectId=${pid}`);

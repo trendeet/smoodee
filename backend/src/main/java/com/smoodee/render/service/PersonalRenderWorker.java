@@ -59,9 +59,9 @@ public class PersonalRenderWorker {
       GridType gridType = config.getGridType();
       int required =
           switch (gridType) {
-            case G2 -> 4;
-            case G6 -> 6;
-            case G3 -> 9;
+            case G2, G2_GRID -> 4;
+            case G6, G6_GRID -> 6;
+            case G3, G3_GRID -> 9;
           };
       if (frames.size() < required) {
         throw new IllegalStateException(
@@ -187,6 +187,58 @@ public class PersonalRenderWorker {
             new Cell(px0, py2, col, col),    // s6
             new Cell(px1, py2, col, col),    // s7
             new Cell(px2, py2, wide, col)    // s8: wide (cols 2-3)
+        );
+      }
+      case G2_GRID -> {
+        // 2 equal cols, 2 equal rows — 4장 격자
+        int col = (gw - GRID_GAP) / 2;
+        int px0 = PADDING;
+        int px1 = PADDING + col + GRID_GAP;
+        int py0 = PADDING;
+        int py1 = PADDING + col + GRID_GAP;
+        yield List.of(
+            new Cell(px0, py0, col, col),
+            new Cell(px1, py0, col, col),
+            new Cell(px0, py1, col, col),
+            new Cell(px1, py1, col, col)
+        );
+      }
+      case G6_GRID -> {
+        // 2 equal cols, 3 equal rows — 6장 격자
+        int col = (gw - GRID_GAP) / 2;
+        int px0 = PADDING;
+        int px1 = PADDING + col + GRID_GAP;
+        int py0 = PADDING;
+        int py1 = PADDING + col + GRID_GAP;
+        int py2 = PADDING + 2 * (col + GRID_GAP);
+        yield List.of(
+            new Cell(px0, py0, col, col),
+            new Cell(px1, py0, col, col),
+            new Cell(px0, py1, col, col),
+            new Cell(px1, py1, col, col),
+            new Cell(px0, py2, col, col),
+            new Cell(px1, py2, col, col)
+        );
+      }
+      case G3_GRID -> {
+        // 3 equal cols, 3 equal rows — 9장 격자
+        int col = (gw - 2 * GRID_GAP) / 3;
+        int px0 = PADDING;
+        int px1 = PADDING + col + GRID_GAP;
+        int px2 = PADDING + 2 * (col + GRID_GAP);
+        int py0 = PADDING;
+        int py1 = PADDING + col + GRID_GAP;
+        int py2 = PADDING + 2 * (col + GRID_GAP);
+        yield List.of(
+            new Cell(px0, py0, col, col),
+            new Cell(px1, py0, col, col),
+            new Cell(px2, py0, col, col),
+            new Cell(px0, py1, col, col),
+            new Cell(px1, py1, col, col),
+            new Cell(px2, py1, col, col),
+            new Cell(px0, py2, col, col),
+            new Cell(px1, py2, col, col),
+            new Cell(px2, py2, col, col)
         );
       }
     };

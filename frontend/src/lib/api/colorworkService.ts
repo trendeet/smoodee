@@ -85,7 +85,7 @@ export const colorworkService = {
     });
   },
 
-  async selectGrid(projectId: number, gridType: "G2" | "G6" | "G3"): Promise<void> {
+  async selectGrid(projectId: number, gridType: "G2" | "G2_GRID" | "G6" | "G6_GRID" | "G3" | "G3_GRID"): Promise<void> {
     await apiClient.put(`/api/v1/personal/colorwork/${projectId}/grid`, { gridType });
   },
 
