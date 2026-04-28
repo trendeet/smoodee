@@ -3,7 +3,6 @@ import "./globals.css";
 import Providers from "./providers";
 import { AuthProvider } from "@/lib/context/AuthContext";
 import { AppProvider } from "@/lib/context/AppContext";
-import InAppBrowserGuide from "@/components/InAppBrowserGuide";
 
 export const metadata: Metadata = {
   title: "Trender",
@@ -28,7 +27,6 @@ export default function RootLayout({
         <Providers>
           <AuthProvider>
             <AppProvider>
-              <InAppBrowserGuide />
               {children}
             </AppProvider>
           </AuthProvider>
