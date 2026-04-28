@@ -1529,7 +1529,7 @@ const GroupScreen = () => {
               disabled={!chatInput.trim() || sendMessage.isPending}
               className={`p-2.5 rounded-full transition-colors ${
                 chatInput.trim()
-                  ? "bg-blue-600 text-white"
+                  ? "bg-black text-white"
                   : "bg-gray-200 text-gray-400"
               }`}
             >
