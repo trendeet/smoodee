@@ -1522,7 +1522,7 @@ const GroupScreen = () => {
                 handleSendMessage()
               }
               placeholder="메시지를 입력하세요..."
-              className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black/5"
+              className="flex-1 bg-gray-100 rounded-full px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-black/5"
             />
             <button
               onClick={handleSendMessage}
