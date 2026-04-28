@@ -341,7 +341,9 @@ const GroupScreen = () => {
   };
 
   const handleAddSlot = () => {
-    const lastSlot = slots[slots.length - 1];
+    // HH:MM 형식인 슬롯만 기준으로 다음 시간 계산 ("소개" 등 제외)
+    const timeSlots = slots.filter((s) => /^\d{2}:\d{2}$/.test(s.timeLabel));
+    const lastSlot = timeSlots[timeSlots.length - 1];
     let newTime = "09:00";
     if (lastSlot) {
       const lastMins = timeToMinutes(lastSlot.timeLabel);
