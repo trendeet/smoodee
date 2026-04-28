@@ -1404,7 +1404,7 @@ const GroupScreen = () => {
                           }}
                           placeholder={slot.timeLabel === "소개" ? "본인을 소개해주세요!" : "텍스트 추가..."}
                           maxLength={100}
-                          className="slot-caption-input flex-1 min-w-0 text-[11px] text-gray-700 bg-transparent outline-none placeholder-gray-400"
+                          className="flex-1 min-w-0 text-base text-gray-700 bg-transparent outline-none placeholder-gray-400"
                         />
                         <span className="text-[10px] text-gray-300 shrink-0 font-mono tabular-nums">
                           {(slotCaptions[slot.id] ?? "").length}/100
