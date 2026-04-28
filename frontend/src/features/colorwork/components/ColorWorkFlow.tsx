@@ -509,9 +509,9 @@ const ColorWorkFlow = () => {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex flex-col items-center text-center mb-6">
-            <h2 className="text-xl font-black text-gray-900">떠나시겠어요?</h2>
+            <h2 className="text-xl font-black text-gray-900">레이아웃 선택으로 돌아갈까요?</h2>
             <p className="text-sm text-gray-500 font-medium mt-2">
-              저장하지 않으면 여태까지 한 내용이 사라져요.
+              업로드한 사진이 초기화돼요.
             </p>
           </div>
           <div className="flex gap-3">
@@ -524,12 +524,12 @@ const ColorWorkFlow = () => {
             <button
               onClick={() => {
                 setShowLeaveConfirm(false);
-                sessionStorage.removeItem("cw_session");
-                router.replace("/");
+                setSlots(Array(LAYOUT_CONFIG[gridType!].slotCount).fill(null));
+                setStep(2);
               }}
               className="flex-1 py-3 bg-black text-white rounded-2xl text-sm font-bold hover:bg-gray-800 transition-colors"
             >
-              나가기
+              뒤로가기
             </button>
           </div>
         </div>
@@ -1147,7 +1147,10 @@ const ColorWorkFlow = () => {
         <div className="px-6 pt-6 pb-2">
           <div className="flex items-start gap-2">
             <button
-              onClick={() => setShowLeaveConfirm(true)}
+              onClick={() => {
+                sessionStorage.removeItem("cw_session");
+                router.replace("/");
+              }}
               className="mt-1 p-2 -ml-2 rounded-full hover:bg-gray-100 shrink-0 transition-colors"
             >
               <ChevronLeft />
