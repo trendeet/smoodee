@@ -246,11 +246,7 @@ const InProgressPage = () => {
   return (
     // 외부: 스크롤 없음, absolute 포지셔닝 기준
     <div className="flex flex-col h-full bg-white relative overflow-hidden">
-      {/* DEBUG: URL 표시 */}
-      <div className="bg-yellow-100 border-b border-yellow-300 px-3 py-1.5 text-[11px] font-mono text-yellow-900 break-all z-50">
-        📍 {typeof window !== "undefined" ? window.location.href : pathname}
-      </div>
-      {showArchiveToast && <Toast message="보관함으로 이동되었습니다!" />}
+{showArchiveToast && <Toast message="보관함으로 이동되었습니다!" />}
 
       {/* 스크롤 영역 */}
       <div className="flex-1 overflow-y-auto no-scrollbar">
