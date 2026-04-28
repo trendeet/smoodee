@@ -26,6 +26,7 @@ import { useUI } from "@/lib/context/UIContext";
 import { useAuth } from "@/lib/context/AuthContext";
 import { projectService } from "@/lib/api/projectService";
 import { groupService } from "@/lib/api/groupService";
+import { slotService } from "@/lib/api/slotService";
 import { LAYOUT_CONFIG } from "@/features/colorwork/layoutConfig";
 
 const TEMPLATE_NAMES: Record<string, string> = {
@@ -86,6 +87,40 @@ const GroupMemberAvatars = ({ groupId }: { groupId: number }) => {
           </div>
         );
       })}
+    </div>
+  );
+};
+
+const GroupProgressBar = ({ groupId }: { groupId: number }) => {
+  const { data: progress } = useQuery({
+    queryKey: ["group", groupId, "progress"],
+    queryFn: () => slotService.getProgress(groupId),
+    staleTime: 30_000,
+  });
+
+  if (!progress) return null;
+
+  const totalCells = progress.slots.length * progress.memberUserIds.length;
+  const filledCells = totalCells > 0
+    ? Object.values(progress.matrix).reduce(
+        (sum, row) => sum + Object.values(row).filter((s) => s === "UPLOADED").length,
+        0
+      )
+    : 0;
+  const pct = totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-xs font-bold text-gray-400">
+        <span>진행률</span>
+        <span className="text-black">{pct}%</span>
+      </div>
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-1000"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 };
@@ -546,18 +581,22 @@ const InProgressPage = () => {
                       )}
                     </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-bold text-gray-400">
-                      <span>진행률</span>
-                      <span className="text-black">{STATUS_PROGRESS[project.status] ?? 0}%</span>
+                  {project.groupId
+                    ? <GroupProgressBar groupId={project.groupId} />
+                    : (
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-bold text-gray-400">
+                        <span>진행률</span>
+                        <span className="text-black">{STATUS_PROGRESS[project.status] ?? 0}%</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-1000"
+                          style={{ width: `${STATUS_PROGRESS[project.status] ?? 0}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-1000"
-                        style={{ width: `${STATUS_PROGRESS[project.status] ?? 0}%` }}
-                      />
-                    </div>
-                  </div>
+                  )}
                   {!isSelectMode && project.status === "DONE" && (
                     <div className="mt-4 pt-4 border-t border-gray-100 flex flex-col items-center">
                       <button
