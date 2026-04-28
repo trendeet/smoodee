@@ -134,9 +134,9 @@ public class ColorworkService {
 
     int maxIndex =
         switch (config.getGridType()) {
-          case G2 -> 3;
-          case G6 -> 5;
-          case G3 -> 8;
+          case G2, G2_GRID -> 3;
+          case G6, G6_GRID -> 5;
+          case G3, G3_GRID -> 8;
         };
     if (frameIndex < 0 || frameIndex > maxIndex) {
       throw new BusinessException(ErrorCode.INVALID_FRAME_INDEX);
@@ -184,9 +184,9 @@ public class ColorworkService {
                   config.getGridType() == null
                       ? 0
                       : switch (config.getGridType()) {
-                        case G2 -> 4;
-                        case G6 -> 6;
-                        case G3 -> 9;
+                        case G2, G2_GRID -> 4;
+                        case G6, G6_GRID -> 6;
+                        case G3, G3_GRID -> 9;
                       };
               int filled =
                   (int)
