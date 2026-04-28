@@ -18,14 +18,11 @@ export default function InAppBrowserGuide() {
 
   const handleOpen = () => {
     const url = window.location.href;
-    if (!isIOS) {
-      window.location.href =
-        "intent://" +
-        url.replace(/https?:\/\//, "") +
-        "#Intent;scheme=https;action=android.intent.action.VIEW;end";
-    } else {
-      window.open(url, "_blank");
-    }
+    // Android: intent 스킴으로 Chrome 강제 오픈
+    window.location.href =
+      "intent://" +
+      url.replace(/https?:\/\//, "") +
+      "#Intent;scheme=https;action=android.intent.action.VIEW;end";
   };
 
   return (
@@ -39,19 +36,25 @@ export default function InAppBrowserGuide() {
         <br />
         Safari 또는 Chrome으로 접속해주세요.
       </p>
-      <button
-        onClick={handleOpen}
-        className="w-full py-4 bg-black text-white font-bold rounded-2xl mb-4"
-      >
-        외부 브라우저로 열기
-      </button>
-      <p className="text-xs text-gray-400 text-center leading-relaxed">
-        버튼이 작동하지 않으면
-        <br />
-        우측 하단 ··· 메뉴 →{" "}
-        <strong className="text-gray-600">기본 브라우저로 열기</strong>를
-        눌러주세요.
-      </p>
+      {isIOS ? (
+        <div className="w-full bg-gray-50 rounded-2xl p-5 text-center">
+          <p className="text-sm font-bold text-gray-800 mb-2">iPhone 사용자</p>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            하단 오른쪽{" "}
+            <strong className="text-gray-800">··· 메뉴</strong>를 탭한 후
+            <br />
+            <strong className="text-gray-800">기본 브라우저로 열기</strong>를
+            선택해주세요.
+          </p>
+        </div>
+      ) : (
+        <button
+          onClick={handleOpen}
+          className="w-full py-4 bg-black text-white font-bold rounded-2xl"
+        >
+          외부 브라우저로 열기
+        </button>
+      )}
     </div>
   );
 }
