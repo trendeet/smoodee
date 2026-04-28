@@ -110,7 +110,9 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
 
         // Restore grid and slots — backend only knows G2/G6/G3, map to base types
         if (state.gridType) {
-          const gt = state.gridType as "G2" | "G6" | "G3";
+          // localStorage에 저장된 프론트 타입(G2_GRID 등) 우선 사용
+          const savedFrontType = localStorage.getItem(`cw_grid_${state.id}`);
+          const gt = (savedFrontType ?? state.gridType) as GridLayoutType;
           setGridType(gt);
           const slotCount = LAYOUT_CONFIG[gt].slotCount;
           const restored: (UploadSlot | null)[] = Array(slotCount).fill(null);
