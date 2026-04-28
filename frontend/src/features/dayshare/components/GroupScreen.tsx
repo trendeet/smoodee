@@ -1233,7 +1233,7 @@ const GroupScreen = () => {
                   const uploaded = slotAssets[slot.id];
                   const isFilled = !!uploaded;
                   return (
-                    <div key={slot.id} className="flex flex-col gap-2">
+                    <div key={slot.id} className={`flex flex-col gap-2 ${slot.timeLabel === "소개" ? "mt-2" : ""}`}>
                       {/* Card */}
                       <div
                         className="relative rounded-3xl overflow-hidden"
@@ -1402,7 +1402,7 @@ const GroupScreen = () => {
                                 e.target.value
                               );
                           }}
-                          placeholder={slot.timeLabel === "소개" ? "본인을 소개해주세요!" : "텍스트 추가..."}
+                          placeholder="텍스트 추가..."
                           maxLength={100}
                           className="flex-1 min-w-0 text-base text-gray-700 bg-transparent outline-none placeholder-gray-400"
                         />
@@ -1410,6 +1410,9 @@ const GroupScreen = () => {
                           {(slotCaptions[slot.id] ?? "").length}/100
                         </span>
                       </div>
+                      {slot.timeLabel === "소개" && (
+                        <p className="text-[10px] text-gray-400 px-1">*소개 슬롯은 본인을 소개해주세요!</p>
+                      )}
                     </div>
                   );
                 })}
