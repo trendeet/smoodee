@@ -6,6 +6,13 @@
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 .pb-safe { padding-bottom: max(20px, env(safe-area-inset-bottom)); }
 
+/* iOS auto-zoom 방지: input font-size < 16px면 포커스 시 zoom 발생 */
+input:not([type="file"]):not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+  font-size: 16px !important;
+}
+
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fade-in-down { from { opacity: 0; transform: translate(-50%, -20px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
