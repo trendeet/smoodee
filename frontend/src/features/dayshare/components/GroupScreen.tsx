@@ -1282,23 +1282,23 @@ const GroupScreen = () => {
                               소개
                             </span>
                           ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShowTimePickerSlotId(slot.id);
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold font-mono tracking-tight transition-all active:scale-95"
-                            style={{
-                              background: isFilled
-                                ? "rgba(0,0,0,0.40)"
-                                : "rgba(0,0,0,0.07)",
-                              color: isFilled ? "#fff" : "#666",
-                              backdropFilter: "blur(4px)",
-                            }}
-                          >
-                            <Clock size={10} />
-                            {slot.timeLabel}
-                          </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowTimePickerSlotId(slot.id);
+                              }}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold font-mono tracking-tight transition-all active:scale-95"
+                              style={{
+                                background: isFilled
+                                  ? "rgba(0,0,0,0.40)"
+                                  : "rgba(0,0,0,0.07)",
+                                color: isFilled ? "#fff" : "#666",
+                                backdropFilter: "blur(4px)",
+                              }}
+                            >
+                              <Clock size={10} />
+                              {slot.timeLabel}
+                            </button>
                           )}
                           {isFilled ? (
                             <button
@@ -1355,19 +1355,12 @@ const GroupScreen = () => {
                             {uploadingSlotId === slot.id ? (
                               <div className="w-6 h-6 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
                             ) : (
-                              <>
-                                <div
-                                  className="w-14 h-14 rounded-full border-2 border-dashed flex items-center justify-center"
-                                  style={{ borderColor: "#333" }}
-                                >
-                                  <Camera size={22} style={{ color: "#333" }} />
-                                </div>
-                                {slot.timeLabel === "소개" && (
-                                  <p className="text-[11px] font-medium text-gray-500 text-center px-4">
-                                    본인이 누군지 소개해주세요!
-                                  </p>
-                                )}
-                              </>
+                              <div
+                                className="w-14 h-14 rounded-full border-2 border-dashed flex items-center justify-center"
+                                style={{ borderColor: "#333" }}
+                              >
+                                <Camera size={22} style={{ color: "#333" }} />
+                              </div>
                             )}
                           </button>
                         )}
@@ -1409,7 +1402,7 @@ const GroupScreen = () => {
                                 e.target.value
                               );
                           }}
-                          placeholder="텍스트 추가..."
+                          placeholder={slot.timeLabel === "소개" ? "본인을 소개해주세요!" : "텍스트 추가..."}
                           maxLength={100}
                           className="flex-1 min-w-0 text-[11px] text-gray-700 bg-transparent outline-none placeholder-gray-400"
                         />
