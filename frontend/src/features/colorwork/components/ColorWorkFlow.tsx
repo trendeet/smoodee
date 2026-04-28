@@ -133,7 +133,7 @@ const ColorWorkFlow = () => {
       if (s.selectedApiPalette) setSelectedApiPalette(s.selectedApiPalette);
       if (s.gridType) {
         setGridType(s.gridType);
-        const count = s.gridType === "G2" ? 4 : s.gridType === "G6" ? 6 : 9;
+        const count = LAYOUT_CONFIG[s.gridType]?.slotCount ?? 9;
         setSlots(Array(count).fill(null));
       }
       if (s.projectId) setProjectId(s.projectId);
