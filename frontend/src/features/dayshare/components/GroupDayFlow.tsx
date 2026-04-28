@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
 import { groupService } from "@/lib/api/groupService";
+import { slotService } from "@/lib/api/slotService";
 
 const GroupDayFlow = () => {
   const router = useRouter();
@@ -33,6 +34,8 @@ const GroupDayFlow = () => {
       if (coverFile) {
         await groupService.uploadCoverImage(group.id, coverFile);
       }
+      // 기본 소개 슬롯 추가 (영상 맨 앞)
+      await slotService.createSlot(group.id, { timeLabel: "소개" });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       router.push(`/inprogress/group/${group.id}`);
     } finally {
