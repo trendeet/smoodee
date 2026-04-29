@@ -805,12 +805,17 @@ const GroupScreen = () => {
             <ChevronLeft size={24} />
           </button>
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            {group?.coverImageUrl && (
+            {group?.coverImageUrl ? (
               <img
                 src={group.coverImageUrl}
                 alt={displayName}
                 className="w-9 h-9 rounded-xl object-cover shrink-0"
-                style={{ border: "2px solid #e5e7eb" }}
+                style={{ border: "2px solid #333" }}
+              />
+            ) : (
+              <div
+                className="w-9 h-9 rounded-xl shrink-0 bg-gradient-to-br from-blue-400 to-cyan-300"
+                style={{ border: "2px solid #333" }}
               />
             )}
             <div className="min-w-0">
