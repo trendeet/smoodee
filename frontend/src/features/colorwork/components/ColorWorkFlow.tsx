@@ -815,7 +815,7 @@ const ColorWorkFlow = () => {
                             {/* 이미지: 모든 카드 동일 비율 */}
                             <div className="w-full aspect-[3/2] overflow-hidden">
                               {previewImage ? (
-                                <img src={previewImage} className="w-full h-full object-cover" />
+                                <img src={previewImage} className="w-full h-full object-contain" />
                               ) : (
                                 <div className={`w-full h-full ${isSel ? "bg-gray-300" : "bg-gray-100"}`} />
                               )}
@@ -1257,7 +1257,7 @@ const ColorWorkFlow = () => {
                       {/* 이미지: 모든 카드 동일 비율 */}
                       <div className="w-full aspect-[3/2] overflow-hidden relative">
                         {previewImage ? (
-                          <img src={previewImage} className="w-full h-full object-cover" />
+                          <img src={previewImage} className="w-full h-full object-contain" />
                         ) : (
                           <div className={`w-full h-full ${isSelected ? "bg-gray-300" : "bg-gray-100"}`} />
                         )}
