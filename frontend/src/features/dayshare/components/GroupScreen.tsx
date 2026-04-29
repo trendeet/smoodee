@@ -1107,7 +1107,7 @@ const GroupScreen = () => {
                 )
                 .slice(0, showAllProgress ? undefined : 3)
                 .map((member) => {
-                  const totalSlots = progress?.slots?.length ?? 0;
+                  const totalSlots = slots.length;
                   const uploaded = progress?.matrix
                     ? Object.values(progress.matrix).filter(
                         (slotMap) =>
@@ -1197,7 +1197,12 @@ const GroupScreen = () => {
             </div>
           </div>
 
-          {isAllFilled && (
+          {isAllFilled && !(renderStatus === "SUCCEEDED" && resultVideoUrl) && (
+            <div className="mx-4 mt-3 flex items-center gap-1.5 text-xs text-gray-400 font-medium justify-center">
+              <Check size={12} strokeWidth={3} /> 모든 업로드가 완료되었습니다. 영상을 만들어볼까요?
+            </div>
+          )}
+          {renderStatus === "SUCCEEDED" && resultVideoUrl && (
             <div className="mx-4 mt-3 flex flex-col items-center gap-3">
               <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
                 <Check size={12} strokeWidth={3} /> 모든 멤버의 기록이
