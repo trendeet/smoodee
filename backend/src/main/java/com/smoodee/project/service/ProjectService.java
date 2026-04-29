@@ -7,7 +7,9 @@ import com.smoodee.project.domain.Project;
 import com.smoodee.project.domain.ProjectStatus;
 import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.repository.ProjectRepository;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -40,7 +42,17 @@ public class ProjectService {
     if (type == ProjectType.GROUP) {
       return projectRepository.findGroupProjectsByMembership(userId, statuses);
     }
-    return projectRepository.findByUserIdAndTypeAndStatuses(userId, type, statuses);
+    if (type == ProjectType.PERSONAL) {
+      return projectRepository.findByUserIdAndTypeAndStatuses(userId, type, statuses);
+    }
+    // type == null: 개인(소유자 기반) + 그룹(멤버십 기반) 합산
+    List<Project> personal = projectRepository.findByUserIdAndTypeAndStatuses(
+        userId, ProjectType.PERSONAL, statuses);
+    List<Project> group = projectRepository.findGroupProjectsByMembership(userId, statuses);
+    List<Project> combined = new ArrayList<>(personal);
+    combined.addAll(group);
+    combined.sort(Comparator.comparing(Project::getUpdatedAt).reversed());
+    return combined;
   }
 
   @Transactional(readOnly = true)
