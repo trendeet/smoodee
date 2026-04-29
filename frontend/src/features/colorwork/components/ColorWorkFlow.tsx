@@ -831,7 +831,7 @@ const ColorWorkFlow = () => {
                                   <img
                                     key={area}
                                     src={cellImg}
-                                    className="rounded-[2px] w-full h-full object-cover"
+                                    className="rounded-[2px] w-full h-full object-cover block"
                                     style={{ gridArea: area }}
                                   />
                                 ) : (
