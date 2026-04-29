@@ -804,44 +804,70 @@ const ColorWorkFlow = () => {
                       {variants.map((type) => {
                         const cfg = LAYOUT_CONFIG[type];
                         const isSel = type === "G2";
+                        const images = (cfg as { previewImages?: string[] }).previewImages;
+                        // 미니 구조도 높이: previewSize 비율 유지, 너비 28 고정
+                        const miniW = 28;
+                        const miniH = Math.round(miniW * (cfg.previewSize.height / cfg.previewSize.width));
                         return (
                           <div
                             key={type}
-                            className={`flex-1 border-2 rounded-2xl p-4 flex flex-col items-center gap-3 ${
+                            className={`flex-1 border-2 rounded-2xl overflow-hidden flex flex-col ${
                               isSel
-                                ? "border-black bg-gray-50 shadow-lg"
-                                : "border-gray-100 bg-white"
+                                ? "border-black shadow-lg"
+                                : "border-gray-200 bg-white"
                             }`}
                           >
+                            {/* 상단: 사진 예시 그리드 */}
                             <div
-                              className="grid gap-[3px]"
+                              className="grid gap-[2px] w-full"
                               style={{
                                 gridTemplateAreas: cfg.previewAreas,
-                                gridTemplateColumns:
-                                  cfg.containerStyle.gridTemplateColumns,
-                                gridTemplateRows:
-                                  cfg.containerStyle.gridTemplateRows,
-                                width: cfg.previewSize.width,
-                                height: cfg.previewSize.height,
+                                gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
+                                gridTemplateRows: cfg.containerStyle.gridTemplateRows,
+                                aspectRatio: cfg.containerStyle.aspectRatio,
                               }}
                             >
-                              {cfg.previewCells.map((area) => (
-                                <div
-                                  key={area}
-                                  className={`rounded-[2px] ${
-                                    isSel ? "bg-gray-400" : "bg-gray-200"
-                                  }`}
-                                  style={{ gridArea: area }}
-                                />
-                              ))}
+                              {cfg.previewCells.map((area, i) =>
+                                images?.[i] ? (
+                                  <img
+                                    key={area}
+                                    src={images[i]}
+                                    className="w-full h-full object-cover"
+                                    style={{ gridArea: area }}
+                                  />
+                                ) : (
+                                  <div
+                                    key={area}
+                                    className={isSel ? "bg-gray-300" : "bg-gray-100"}
+                                    style={{ gridArea: area }}
+                                  />
+                                )
+                              )}
                             </div>
-                            <span
-                              className={`text-xs font-bold ${
-                                isSel ? "text-gray-900" : "text-gray-400"
-                              }`}
-                            >
-                              {cfg.label}
-                            </span>
+                            {/* 하단: 미니 구조도 + 라벨 */}
+                            <div className={`flex items-center gap-2 px-3 py-2 ${isSel ? "bg-gray-50" : "bg-white"}`}>
+                              <div
+                                className="grid gap-[2px] shrink-0"
+                                style={{
+                                  gridTemplateAreas: cfg.previewAreas,
+                                  gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
+                                  gridTemplateRows: cfg.containerStyle.gridTemplateRows,
+                                  width: miniW,
+                                  height: miniH,
+                                }}
+                              >
+                                {cfg.previewCells.map((area) => (
+                                  <div
+                                    key={area}
+                                    className={`rounded-[1px] ${isSel ? "bg-gray-500" : "bg-gray-300"}`}
+                                    style={{ gridArea: area }}
+                                  />
+                                ))}
+                              </div>
+                              <span className={`text-xs font-bold ${isSel ? "text-gray-900" : "text-gray-400"}`}>
+                                {cfg.label}
+                              </span>
+                            </div>
                           </div>
                         );
                       })}
