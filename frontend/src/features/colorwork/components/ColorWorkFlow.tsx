@@ -805,50 +805,23 @@ const ColorWorkFlow = () => {
                         const cfg = LAYOUT_CONFIG[type];
                         const isSel = type === "G2";
                         const previewImage = (cfg as unknown as { previewImage?: string }).previewImage;
-                        const miniW = 28;
-                        const miniH = Math.round(miniW * (cfg.previewSize.height / cfg.previewSize.width));
                         return (
                           <div
                             key={type}
                             className={`flex-1 border-2 rounded-2xl overflow-hidden flex flex-col ${
-                              isSel
-                                ? "border-black shadow-lg"
-                                : "border-gray-200 bg-white"
+                              isSel ? "border-black shadow-lg" : "border-gray-200 bg-white"
                             }`}
                           >
-                            {/* 상단: 완성본 예시 이미지 */}
-                            {previewImage ? (
-                              <img
-                                src={previewImage}
-                                className="w-full object-cover"
-                                style={{ aspectRatio: cfg.containerStyle.aspectRatio }}
-                              />
-                            ) : (
-                              <div
-                                className={`w-full ${isSel ? "bg-gray-200" : "bg-gray-100"}`}
-                                style={{ aspectRatio: cfg.containerStyle.aspectRatio }}
-                              />
-                            )}
-                            {/* 하단: 미니 구조도 + 라벨 */}
-                            <div className={`flex items-center gap-2 px-3 py-2 ${isSel ? "bg-gray-50" : "bg-white"}`}>
-                              <div
-                                className="grid gap-[2px] shrink-0"
-                                style={{
-                                  gridTemplateAreas: cfg.previewAreas,
-                                  gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
-                                  gridTemplateRows: cfg.containerStyle.gridTemplateRows,
-                                  width: miniW,
-                                  height: miniH,
-                                }}
-                              >
-                                {cfg.previewCells.map((area) => (
-                                  <div
-                                    key={area}
-                                    className={`rounded-[1px] ${isSel ? "bg-gray-500" : "bg-gray-300"}`}
-                                    style={{ gridArea: area }}
-                                  />
-                                ))}
-                              </div>
+                            {/* 이미지: 모든 카드 동일 비율 */}
+                            <div className="w-full aspect-[3/2] overflow-hidden">
+                              {previewImage ? (
+                                <img src={previewImage} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className={`w-full h-full ${isSel ? "bg-gray-300" : "bg-gray-100"}`} />
+                              )}
+                            </div>
+                            {/* 라벨 */}
+                            <div className={`px-3 py-2 ${isSel ? "bg-gray-50" : "bg-white"}`}>
                               <span className={`text-xs font-bold ${isSel ? "text-gray-900" : "text-gray-400"}`}>
                                 {cfg.label}
                               </span>
@@ -1270,44 +1243,34 @@ const ColorWorkFlow = () => {
                 {variants.map((type) => {
                   const cfg = LAYOUT_CONFIG[type];
                   const isSelected = gridType === type;
+                  const previewImage = (cfg as unknown as { previewImage?: string }).previewImage;
                   return (
                     <button
                       key={type}
                       onClick={() => handleGridSelect(type)}
-                      className={`flex-1 border-2 rounded-2xl p-4 flex flex-col items-center gap-3 transition-all ${
+                      className={`flex-1 border-2 rounded-2xl overflow-hidden flex flex-col transition-all active:scale-[0.97] ${
                         isSelected
-                          ? "border-black bg-gray-50 shadow-lg"
-                          : "border-gray-100 hover:border-gray-300"
+                          ? "border-black shadow-lg"
+                          : "border-gray-200 hover:border-gray-300"
                       }`}
                     >
-                      <div
-                        className="grid gap-[3px]"
-                        style={{
-                          gridTemplateAreas: cfg.previewAreas,
-                          gridTemplateColumns:
-                            cfg.containerStyle.gridTemplateColumns,
-                          gridTemplateRows: cfg.containerStyle.gridTemplateRows,
-                          width: cfg.previewSize.width,
-                          height: cfg.previewSize.height,
-                        }}
-                      >
-                        {cfg.previewCells.map((area) => (
-                          <div
-                            key={area}
-                            className={`rounded-[2px] ${
-                              isSelected ? "bg-gray-400" : "bg-gray-200"
-                            }`}
-                            style={{ gridArea: area }}
-                          />
-                        ))}
+                      {/* 이미지: 모든 카드 동일 비율 */}
+                      <div className="w-full aspect-[3/2] overflow-hidden relative">
+                        {previewImage ? (
+                          <img src={previewImage} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className={`w-full h-full ${isSelected ? "bg-gray-300" : "bg-gray-100"}`} />
+                        )}
+                        {isSelected && (
+                          <div className="absolute inset-0 ring-2 ring-inset ring-black/10" />
+                        )}
                       </div>
-                      <span
-                        className={`text-xs font-bold ${
-                          isSelected ? "text-gray-900" : "text-gray-400"
-                        }`}
-                      >
-                        {cfg.label}
-                      </span>
+                      {/* 라벨 */}
+                      <div className={`px-3 py-2 text-left ${isSelected ? "bg-gray-50" : "bg-white"}`}>
+                        <span className={`text-xs font-bold ${isSelected ? "text-gray-900" : "text-gray-500"}`}>
+                          {cfg.label}
+                        </span>
+                      </div>
                     </button>
                   );
                 })}
