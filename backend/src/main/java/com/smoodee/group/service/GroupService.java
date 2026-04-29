@@ -166,7 +166,7 @@ public class GroupService {
 
   @Transactional
   public String uploadCoverImage(Long groupId, Long userId, MultipartFile file) {
-    requireOwner(groupId, userId);
+    requireMember(groupId, userId);
     Group group = getGroup(groupId);
     try {
       String original = file.getOriginalFilename();
