@@ -156,6 +156,15 @@ public class GroupService {
   }
 
   @Transactional
+  public void archiveGroup(Long groupId, Long userId) {
+    requireMember(groupId, userId);
+    Group group = getGroup(groupId);
+    Project project = projectService.getProject(group.getProjectId());
+    project.transitionTo(ProjectStatus.DONE);
+    projectService.save(project);
+  }
+
+  @Transactional
   public String uploadCoverImage(Long groupId, Long userId, MultipartFile file) {
     requireOwner(groupId, userId);
     Group group = getGroup(groupId);

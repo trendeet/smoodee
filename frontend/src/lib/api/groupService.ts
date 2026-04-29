@@ -50,6 +50,10 @@ export const groupService = {
     return data;
   },
 
+  async archiveGroup(groupId: number): Promise<void> {
+    await apiClient.post(`/api/v1/groups/${groupId}/archive`);
+  },
+
   async uploadCoverImage(groupId: number, file: File): Promise<string> {
     const form = new FormData();
     form.append("file", file);

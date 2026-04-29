@@ -1209,12 +1209,19 @@ const GroupScreen = () => {
                 완성됐어요!
               </div>
               <button
-                onClick={() => {
-                  setShowArchiveToast(true);
-                  setTimeout(() => {
-                    setShowArchiveToast(false);
-                    setSelectedGroup(null);
-                  }, 1500);
+                onClick={async () => {
+                  if (!groupId) return;
+                  try {
+                    await groupService.archiveGroup(groupId);
+                    setShowArchiveToast(true);
+                    setTimeout(() => {
+                      setShowArchiveToast(false);
+                      router.push("/inprogress?tab=group");
+                    }, 1500);
+                  } catch {
+                    // 실패 시 그냥 이동
+                    router.push("/inprogress?tab=group");
+                  }
                 }}
                 className="w-full py-2.5 bg-gray-100 text-gray-700 rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-colors active:scale-[0.98]"
               >

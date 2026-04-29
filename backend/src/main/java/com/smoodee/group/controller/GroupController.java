@@ -88,6 +88,14 @@ public class GroupController {
     return ResponseEntity.ok(ApiResponse.of(url));
   }
 
+  @Operation(summary = "그룹 보관함으로 이동 (완료 처리)")
+  @PostMapping("/{groupId}/archive")
+  public ResponseEntity<Void> archiveGroup(
+      @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long groupId) {
+    groupService.archiveGroup(groupId, principal.getUserId());
+    return ResponseEntity.noContent().build();
+  }
+
   @Operation(summary = "그룹 나가기")
   @DeleteMapping("/{groupId}/members/me")
   public ResponseEntity<Void> leaveGroup(
