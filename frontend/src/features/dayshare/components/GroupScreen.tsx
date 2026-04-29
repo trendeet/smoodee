@@ -804,13 +804,23 @@ const GroupScreen = () => {
           >
             <ChevronLeft size={24} />
           </button>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold tracking-tight truncate">
-              {displayName}
-            </h1>
-            <p className="text-xs text-gray-500">
-              참여자 {memberCount}명 • 오늘 기록 중
-            </p>
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            {group?.coverImageUrl && (
+              <img
+                src={group.coverImageUrl}
+                alt={displayName}
+                className="w-9 h-9 rounded-xl object-cover shrink-0"
+                style={{ border: "2px solid #e5e7eb" }}
+              />
+            )}
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold tracking-tight truncate">
+                {displayName}
+              </h1>
+              <p className="text-xs text-gray-500">
+                참여자 {memberCount}명 • 오늘 기록 중
+              </p>
+            </div>
           </div>
           <Button
             size="sm"
