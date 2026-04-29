@@ -804,7 +804,7 @@ const ColorWorkFlow = () => {
                       {variants.map((type) => {
                         const cfg = LAYOUT_CONFIG[type];
                         const isSel = type === "G2";
-                        const images = (cfg as { previewImages?: string[] }).previewImages;
+                        const images = (cfg as unknown as { previewImages?: readonly string[] }).previewImages;
                         // 미니 구조도 높이: previewSize 비율 유지, 너비 28 고정
                         const miniW = 28;
                         const miniH = Math.round(miniW * (cfg.previewSize.height / cfg.previewSize.width));
