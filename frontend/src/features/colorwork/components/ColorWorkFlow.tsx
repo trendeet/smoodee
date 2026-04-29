@@ -828,12 +828,9 @@ const ColorWorkFlow = () => {
                               {cfg.previewCells.map((area, i) => {
                                 const cellImg = (cfg as unknown as { previewCellImages?: string[] }).previewCellImages?.[i];
                                 return cellImg ? (
-                                  <img
-                                    key={area}
-                                    src={cellImg}
-                                    className="rounded-[2px] w-full h-full object-cover block"
-                                    style={{ gridArea: area }}
-                                  />
+                                  <div key={area} className="rounded-[2px] overflow-hidden" style={{ gridArea: area }}>
+                                    <img src={cellImg} className="w-full h-full object-cover block" />
+                                  </div>
                                 ) : (
                                   <div
                                     key={area}
@@ -1291,12 +1288,9 @@ const ColorWorkFlow = () => {
                         {cfg.previewCells.map((area, i) => {
                           const cellImg = (cfg as unknown as { previewCellImages?: string[] }).previewCellImages?.[i];
                           return cellImg ? (
-                            <img
-                              key={area}
-                              src={cellImg}
-                              className="rounded-[2px] w-full h-full object-cover"
-                              style={{ gridArea: area }}
-                            />
+                            <div key={area} className="rounded-[2px] overflow-hidden" style={{ gridArea: area }}>
+                              <img src={cellImg} className="w-full h-full object-cover block" />
+                            </div>
                           ) : (
                             <div
                               key={area}
