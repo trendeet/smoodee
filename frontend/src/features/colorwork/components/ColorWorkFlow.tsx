@@ -804,8 +804,7 @@ const ColorWorkFlow = () => {
                       {variants.map((type) => {
                         const cfg = LAYOUT_CONFIG[type];
                         const isSel = type === "G2";
-                        const images = (cfg as unknown as { previewImages?: readonly string[] }).previewImages;
-                        // 미니 구조도 높이: previewSize 비율 유지, 너비 28 고정
+                        const previewImage = (cfg as unknown as { previewImage?: string }).previewImage;
                         const miniW = 28;
                         const miniH = Math.round(miniW * (cfg.previewSize.height / cfg.previewSize.width));
                         return (
@@ -817,33 +816,19 @@ const ColorWorkFlow = () => {
                                 : "border-gray-200 bg-white"
                             }`}
                           >
-                            {/* 상단: 사진 예시 그리드 */}
-                            <div
-                              className="grid gap-[2px] w-full"
-                              style={{
-                                gridTemplateAreas: cfg.previewAreas,
-                                gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
-                                gridTemplateRows: cfg.containerStyle.gridTemplateRows,
-                                aspectRatio: cfg.containerStyle.aspectRatio,
-                              }}
-                            >
-                              {cfg.previewCells.map((area, i) =>
-                                images?.[i] ? (
-                                  <img
-                                    key={area}
-                                    src={images[i]}
-                                    className="w-full h-full object-cover"
-                                    style={{ gridArea: area }}
-                                  />
-                                ) : (
-                                  <div
-                                    key={area}
-                                    className={isSel ? "bg-gray-300" : "bg-gray-100"}
-                                    style={{ gridArea: area }}
-                                  />
-                                )
-                              )}
-                            </div>
+                            {/* 상단: 완성본 예시 이미지 */}
+                            {previewImage ? (
+                              <img
+                                src={previewImage}
+                                className="w-full object-cover"
+                                style={{ aspectRatio: cfg.containerStyle.aspectRatio }}
+                              />
+                            ) : (
+                              <div
+                                className={`w-full ${isSel ? "bg-gray-200" : "bg-gray-100"}`}
+                                style={{ aspectRatio: cfg.containerStyle.aspectRatio }}
+                              />
+                            )}
                             {/* 하단: 미니 구조도 + 라벨 */}
                             <div className={`flex items-center gap-2 px-3 py-2 ${isSel ? "bg-gray-50" : "bg-white"}`}>
                               <div
