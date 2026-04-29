@@ -825,15 +825,23 @@ const ColorWorkFlow = () => {
                                 height: cfg.previewSize.height,
                               }}
                             >
-                              {cfg.previewCells.map((area) => (
-                                <div
-                                  key={area}
-                                  className={`rounded-[2px] ${
-                                    isSel ? "bg-gray-400" : "bg-gray-200"
-                                  }`}
-                                  style={{ gridArea: area }}
-                                />
-                              ))}
+                              {cfg.previewCells.map((area, i) => {
+                                const cellImg = (cfg as unknown as { previewCellImages?: string[] }).previewCellImages?.[i];
+                                return cellImg ? (
+                                  <img
+                                    key={area}
+                                    src={cellImg}
+                                    className="rounded-[2px] w-full h-full object-cover"
+                                    style={{ gridArea: area }}
+                                  />
+                                ) : (
+                                  <div
+                                    key={area}
+                                    className={`rounded-[2px] ${isSel ? "bg-gray-400" : "bg-gray-200"}`}
+                                    style={{ gridArea: area }}
+                                  />
+                                );
+                              })}
                             </div>
                             <span
                               className={`text-xs font-bold ${
@@ -1280,15 +1288,23 @@ const ColorWorkFlow = () => {
                           height: cfg.previewSize.height,
                         }}
                       >
-                        {cfg.previewCells.map((area) => (
-                          <div
-                            key={area}
-                            className={`rounded-[2px] ${
-                              isSelected ? "bg-gray-400" : "bg-gray-200"
-                            }`}
-                            style={{ gridArea: area }}
-                          />
-                        ))}
+                        {cfg.previewCells.map((area, i) => {
+                          const cellImg = (cfg as unknown as { previewCellImages?: string[] }).previewCellImages?.[i];
+                          return cellImg ? (
+                            <img
+                              key={area}
+                              src={cellImg}
+                              className="rounded-[2px] w-full h-full object-cover"
+                              style={{ gridArea: area }}
+                            />
+                          ) : (
+                            <div
+                              key={area}
+                              className={`rounded-[2px] ${isSelected ? "bg-gray-400" : "bg-gray-200"}`}
+                              style={{ gridArea: area }}
+                            />
+                          );
+                        })}
                       </div>
                       <span
                         className={`text-xs font-bold ${

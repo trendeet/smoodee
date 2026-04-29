@@ -36,6 +36,12 @@ export const LAYOUT_CONFIG = {
     },
     previewAreas: '"a b" "c d"',
     previewCells: ["a", "b", "c", "d"] as const,
+    previewCellImages: [
+      "/images/g2_grid_1.jpg",
+      "/images/g2_grid_2.jpg",
+      "/images/g2_grid_3.jpg",
+      "/images/g2_grid_4.jpg",
+    ],
     previewSize: { width: 44, height: 44 },
     backendType: "G2" as const,
     slotCount: 4,
