@@ -13,6 +13,8 @@ import {
   Sparkles,
   UserPlus,
   MessageCircle,
+  Film,
+  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import StatusBar from "@/components/ui/StatusBar";
@@ -70,28 +72,47 @@ const HomeScreen = () => {
   const unreadNotifications = notifications.filter((n) => !n.read);
   const hasUnread = unreadNotifications.length > 0;
 
-  const notifIcon = (type: string) => {
-    if (type === "GROUP_COMPLETE" || type === "GROUP_RENDER_DONE")
+  // ── 템플릿별 스타일 ────────────────────────────────────────────────────────
+  const getTemplateStyle = (type: string) => {
+    if (type === "NEW_TEMPLATE") {
+      // 마니또 등 공지성 알림 — 추후 template 필드로 분기 예정
       return {
-        icon: <Check size={16} />,
-        color: "bg-green-100 text-green-600",
+        gradient: "from-purple-500 to-purple-400",
+        icon: <Sparkles className="w-4 h-4 text-white" />,
+        labelColor: "text-purple-600",
+        bgColor: "bg-purple-50",
+        templateName: "공지",
       };
-    if (type === "SLOT_FILLED" || type === "SLOT_UPLOAD_DONE")
-      return { icon: <Camera size={16} />, color: "bg-blue-100 text-blue-600" };
-    if (type === "NEW_TEMPLATE")
-      return {
-        icon: <Sparkles size={16} />,
-        color: "bg-purple-100 text-purple-600",
-      };
-    if (type === "NEW_CHAT_MESSAGE")
-      return {
-        icon: <MessageCircle size={16} />,
-        color: "bg-indigo-100 text-indigo-600",
-      };
+    }
+    // 하루공유 (그룹 관련 알림 기본)
     return {
-      icon: <UserPlus size={16} />,
-      color: "bg-orange-100 text-orange-600",
+      gradient: "from-blue-400 to-cyan-300",
+      icon: <Film className="w-4 h-4 text-white" />,
+      labelColor: "text-cyan-600",
+      bgColor: "bg-cyan-50",
+      templateName: "하루공유",
     };
+    /* 향후 추가 예정 템플릿 스타일
+    컬러워크: { gradient: "from-orange-500 to-red-400", icon: <Palette />, labelColor: "text-orange-600", bgColor: "bg-orange-50", templateName: "컬러워크" }
+    마니또:  { gradient: "from-violet-500 to-purple-400", icon: <Wand2 />, labelColor: "text-violet-600", bgColor: "bg-violet-50", templateName: "마니또" }
+    */
+  };
+
+  const getTypeInfo = (type: string) => {
+    switch (type) {
+      case "NEW_CHAT_MESSAGE":
+        return { icon: <MessageCircle className="w-3 h-3" />, label: "새 메시지" };
+      case "GROUP_COMPLETE":
+      case "GROUP_RENDER_DONE":
+        return { icon: <Check className="w-3 h-3" />, label: "완료" };
+      case "SLOT_FILLED":
+      case "SLOT_UPLOAD_DONE":
+        return { icon: <Camera className="w-3 h-3" />, label: "업로드" };
+      case "NEW_TEMPLATE":
+        return { icon: <Sparkles className="w-3 h-3" />, label: "공지" };
+      default:
+        return { icon: <Bell className="w-3 h-3" />, label: "알림" };
+    }
   };
 
   return (
@@ -245,54 +266,79 @@ const HomeScreen = () => {
             </h1>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2">
+          <div className="flex-1 overflow-y-auto">
             {unreadNotifications.length > 0 ? (
-              unreadNotifications.map((noti) => {
-                const { icon, color } = notifIcon(noti.type);
-                return (
-                  <div
-                    key={noti.id}
-                    onClick={() => {
-                      markRead.mutate(noti.id);
-                      if (noti.type === "NEW_CHAT_MESSAGE" && noti.referenceId) {
-                        setShowNotifications(false);
-                        router.push(`/inprogress/group/${noti.referenceId}?tab=chat`);
-                      }
-                    }}
-                    className={`flex gap-4 p-4 rounded-2xl hover:bg-gray-50 transition-colors cursor-pointer active:scale-[0.98] ${
-                      !noti.read ? "bg-blue-50/30" : ""
-                    }`}
-                  >
+              <div className="flex flex-col">
+                {unreadNotifications.map((noti) => {
+                  const style = getTemplateStyle(noti.type);
+                  const typeInfo = getTypeInfo(noti.type);
+                  return (
                     <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${color}`}
+                      key={noti.id}
+                      onClick={() => {
+                        markRead.mutate(noti.id);
+                        if (noti.type === "NEW_CHAT_MESSAGE" && noti.referenceId) {
+                          setShowNotifications(false);
+                          router.push(`/inprogress/group/${noti.referenceId}?tab=chat`);
+                        }
+                      }}
+                      className="group relative p-5 flex gap-4 transition-all hover:bg-gray-50 border-b border-gray-50 active:scale-[0.98] cursor-pointer"
                     >
-                      {icon}
+                      {/* 템플릿 로고 */}
+                      <div className={`shrink-0 w-12 h-12 rounded-2xl bg-gradient-to-br ${style.gradient} flex items-center justify-center shadow-md shadow-cyan-100`}>
+                        {style.icon}
+                      </div>
+
+                      <div className="flex-1 flex flex-col gap-1 pr-6">
+                        {/* 템플릿명 + 타입 + 날짜 */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${style.bgColor} ${style.labelColor} uppercase tracking-wider`}>
+                              {style.templateName}
+                            </span>
+                            <div className="flex items-center gap-1 text-gray-400 text-[11px]">
+                              {typeInfo.icon}
+                              <span>{typeInfo.label}</span>
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-gray-300 font-medium">
+                            {new Date(noti.createdAt).toLocaleDateString("ko-KR")}
+                          </span>
+                        </div>
+
+                        {/* 알림 내용 */}
+                        <p className="text-[14px] text-gray-700 line-clamp-2 leading-snug mt-0.5">
+                          {noti.body}
+                        </p>
+                      </div>
+
+                      {/* 읽음 처리 힌트 */}
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="bg-gray-100 p-1.5 rounded-full">
+                          <X className="w-3 h-3 text-gray-400" />
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex-1 border-b border-gray-50 pb-4">
-                      <p className="text-sm font-medium text-gray-900 leading-snug break-keep mb-1">
-                        {noti.body}
-                      </p>
-                      <span className="text-xs font-bold text-gray-400">
-                        {new Date(noti.createdAt).toLocaleDateString("ko-KR")}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
+                  );
+                })}
+              </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                <Bell size={32} className="mb-3 opacity-20" />
+              <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                  <Bell size={28} className="opacity-20" />
+                </div>
                 <p className="text-sm font-medium">새로운 알림이 없습니다</p>
               </div>
             )}
 
-            <div className="pt-8 pb-12 flex flex-col items-center justify-center opacity-60">
-              <div className="w-1 h-1 bg-gray-300 rounded-full mb-1"></div>
-              <div className="w-1 h-1 bg-gray-300 rounded-full mb-1"></div>
-              <div className="w-1 h-1 bg-gray-300 rounded-full"></div>
-              <span className="text-xs font-bold text-gray-400 mt-4">
-                오래된 알림이 없습니다
-              </span>
+            {/* 리스트 푸터 */}
+            <div className="py-12 flex flex-col items-center justify-center gap-3">
+              <div className="flex gap-1.5">
+                <div className="w-1.5 h-1.5 bg-gray-200 rounded-full" />
+                <div className="w-1.5 h-1.5 bg-gray-200 rounded-full" />
+                <div className="w-1.5 h-1.5 bg-gray-200 rounded-full" />
+              </div>
+              <p className="text-[11px] text-gray-300 font-bold tracking-widest uppercase">End of notifications</p>
             </div>
           </div>
         </div>

@@ -14,6 +14,8 @@ import com.smoodee.project.domain.ProjectStatus;
 import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.service.ProjectService;
 import com.smoodee.storage.service.StorageService;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.smoodee.template.domain.TemplateType;
 import java.io.IOException;
 import java.security.SecureRandom;
@@ -41,6 +43,7 @@ public class GroupService {
   private final GroupMemberRepository groupMemberRepository;
   private final ProjectService projectService;
   private final StorageService storageService;
+  private final GroupSseService groupSseService;
 
   @Transactional
   public Group createGroup(Long userId, String name) {
@@ -99,6 +102,14 @@ public class GroupService {
             .build();
     groupMemberRepository.save(member);
 
+    Long groupId = group.getId();
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+      @Override
+      public void afterCommit() {
+        groupSseService.notifyMemberChanged(groupId);
+      }
+    });
+
     return group;
   }
 
@@ -140,6 +151,13 @@ public class GroupService {
       throw new BusinessException(ErrorCode.GROUP_OWNER_CANNOT_LEAVE);
     }
     groupMemberRepository.delete(member);
+
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+      @Override
+      public void afterCommit() {
+        groupSseService.notifyMemberChanged(groupId);
+      }
+    });
   }
 
   public void requireOwner(Long groupId, Long userId) {

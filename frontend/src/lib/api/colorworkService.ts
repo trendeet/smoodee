@@ -18,6 +18,9 @@ interface BackendColorworkState {
   selectedPaletteJson: string | null; // JSON-serialized string[]
   howtoSeen: boolean;
   frames: { frameIndex: number; assetId: number; assetUrl?: string }[];
+  frameColor: string | null;
+  frameThickness: string | null;
+  cornerStyle: string | null;
 }
 
 // ── Helper: parse stored hex JSON back into ColorEntry[] ─────────────────────
@@ -93,6 +96,10 @@ export const colorworkService = {
     await apiClient.put(`/api/v1/personal/colorwork/${projectId}/frames/${index}`, { assetId });
   },
 
+  async saveFrameStyle(projectId: number, body: { frameColor: string; frameThickness: string; cornerStyle: string }): Promise<void> {
+    await apiClient.put(`/api/v1/personal/colorwork/${projectId}/frame-style`, body);
+  },
+
   // Adapts the backend response shape to the frontend's ColorworkStateResponse type.
   async getState(projectId: number): Promise<ColorworkStateResponse> {
     const { data } = await apiClient.get<ApiResponse<BackendColorworkState>>(
@@ -126,6 +133,9 @@ export const colorworkService = {
         assetId: f.assetId,
         assetUrl: f.assetUrl,
       })),
+      frameColor: b.frameColor ?? undefined,
+      frameThickness: b.frameThickness ?? undefined,
+      cornerStyle: b.cornerStyle ?? undefined,
     };
   },
 };

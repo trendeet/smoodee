@@ -35,6 +35,15 @@ public class PersonalColorworkConfig {
   @Column(length = 300)
   private String thumbnailS3Key;
 
+  @Column(length = 20)
+  private String frameColor;
+
+  @Column(length = 10)
+  private String frameThickness;
+
+  @Column(length = 10)
+  private String cornerStyle;
+
   @Builder
   public PersonalColorworkConfig(Long projectId) {
     this.projectId = projectId;
@@ -56,5 +65,11 @@ public class PersonalColorworkConfig {
 
   public void selectGrid(GridType gridType) {
     this.gridType = gridType;
+  }
+
+  public void updateFrameStyle(String frameColor, String frameThickness, String cornerStyle) {
+    this.frameColor = frameColor;
+    this.frameThickness = frameThickness;
+    this.cornerStyle = cornerStyle;
   }
 }

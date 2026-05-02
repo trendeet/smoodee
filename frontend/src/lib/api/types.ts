@@ -66,6 +66,9 @@ export interface ColorworkStateResponse {
   selectedColors?: ColorEntry[];
   gridType?: string; // "G2" | "G3"
   frames: (FrameEntry | null)[];
+  frameColor?: string;
+  frameThickness?: string;
+  cornerStyle?: string;
 }
 
 export interface FrameEntry {

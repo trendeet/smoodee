@@ -60,6 +60,7 @@ tasks.named('test') {
 
 // .env 파일을 읽어 bootRun에 환경변수로 주입
 bootRun {
+    args = ['--spring.profiles.active=local']
     def envFile = file('.env')
     if (envFile.exists()) {
         envFile.readLines().each { line ->

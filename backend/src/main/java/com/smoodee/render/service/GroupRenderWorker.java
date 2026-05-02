@@ -228,7 +228,7 @@ public class GroupRenderWorker {
         strokeWidth = 2;
       }
       if (text != null) {
-        Path png = renderTextPng(text, fontSize, tempDir, "caption_" + i, strokeWidth);
+        Path png = renderTextPng(text, fontSize, tempDir, "caption_" + i, strokeWidth, true);
         inputArgs.add("-i");
         inputArgs.add(png.toAbsolutePath().toString());
         String xExpr, yExpr;
@@ -246,7 +246,9 @@ public class GroupRenderWorker {
     }
 
     for (int r = 1; r < gridRows; r++) {
-      Path png = renderTextPng(slot.getTimeLabel(), 84, tempDir, "time_" + r, 0, true);
+      String timeLabel = slot.getTimeLabel();
+      if (timeLabel == null || timeLabel.equals("소개")) continue;
+      Path png = renderTextPng(timeLabel, 84, tempDir, "time_" + r, 0, true);
       inputArgs.add("-i");
       inputArgs.add(png.toAbsolutePath().toString());
       int divideY = r * cellHeight;
@@ -270,8 +272,10 @@ public class GroupRenderWorker {
       StringBuilder rowInputs = new StringBuilder();
       for (int r = 0; r < gridRows; r++) rowInputs.append("[row").append(r).append("]");
       filterParts.add(rowInputs + "vstack=inputs=" + gridRows + "[hstacked]");
+    } else if (memberIds.size() == 1) {
+      filterParts.add("[v0]copy[hstacked]");
     } else {
-      // 1열: vstack
+      // 1열: vstack (2명 이상)
       StringBuilder vstackInputs = new StringBuilder();
       for (int i = 0; i < memberIds.size(); i++) vstackInputs.append("[v").append(i).append("]");
       filterParts.add(vstackInputs + "vstack=inputs=" + memberIds.size() + "[hstacked]");

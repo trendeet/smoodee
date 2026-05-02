@@ -89,12 +89,12 @@ export const LAYOUT_CONFIG = {
     previewAreas: '"a b" "c d" "e f"',
     previewCells: ["a", "b", "c", "d", "e", "f"] as const,
     previewCellImages: [
-      "/images/layout-previews/g6_grid_1.png",
+      "/images/layout-previews/g6_grid_1.jpg",
       "/images/layout-previews/g6_grid_2.jpg",
       "/images/layout-previews/g6_grid_3.jpg",
-      "/images/layout-previews/g6_grid_4.png",
+      "/images/layout-previews/g6_grid_4.jpg",
       "/images/layout-previews/g6_grid_5.jpg",
-      "/images/layout-previews/g6_grid_6.png",
+      "/images/layout-previews/g6_grid_6.jpg",
     ],
     previewSize: { width: 40, height: 60 },
     backendType: "G6" as const,
@@ -114,14 +114,14 @@ export const LAYOUT_CONFIG = {
     previewCells: ["a", "b", "c", "d", "e", "f", "g", "h", "i"] as const,
     previewCellImages: [
       "/images/layout-previews/g3_1.jpg",
-      "/images/layout-previews/g3_2.png",
+      "/images/layout-previews/g3_2.jpg",
       "/images/layout-previews/g3_3.jpg",
       "/images/layout-previews/g3_4.jpeg",
-      "/images/layout-previews/g3_5.png",
+      "/images/layout-previews/g3_5.jpg",
       "/images/layout-previews/g3_6.jpg",
-      "/images/layout-previews/g3_7.png",
+      "/images/layout-previews/g3_7.jpg",
       "/images/layout-previews/g3_8.jpg",
-      "/images/layout-previews/g3_9.png",
+      "/images/layout-previews/g3_9.jpg",
     ],
     previewSize: { width: 68, height: 51 },
     backendType: "G3" as const,
@@ -158,7 +158,7 @@ export const LAYOUT_CONFIG = {
 } as const;
 
 export const THICKNESS_CONFIG = {
-  none:   { pad: 0,  gap: 0, rounded: "rounded-none" },
-  thin:   { pad: 8,  gap: 3, rounded: "rounded-lg"   },
-  medium: { pad: 20, gap: 8, rounded: "rounded-xl"   },
+  none:   { pad: 0,  gap: 0, rounded: "rounded-none", canvasRadius: 0,  canvasPad: 0,  canvasGap: 0  },
+  thin:   { pad: 8,  gap: 3, rounded: "rounded-lg",   canvasRadius: 32, canvasPad: 28, canvasGap: 10 },
+  medium: { pad: 20, gap: 8, rounded: "rounded-xl",   canvasRadius: 56, canvasPad: 70, canvasGap: 28 },
 } as const;

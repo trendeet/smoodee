@@ -14,19 +14,17 @@ import {
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
 import ColorBlockSelector from "./ColorBlockSelector";
+import ColorWorkStep3Body from "./ColorWorkStep3Body";
+import ColorWorkStep4Body from "./ColorWorkStep4Body";
 import { colorworkService } from "@/lib/api/colorworkService";
 import { assetService } from "@/lib/api/assetService";
 import { useUI } from "@/lib/context/UIContext";
 import { ColorPalette as ApiColorPalette } from "@/lib/api/types";
 import { GridLayoutType, LAYOUT_CONFIG, THICKNESS_CONFIG } from "../layoutConfig";
 
-// ─── Local types ───────────────────────────────────────────────────────────
+import { UploadSlot } from "../types";
 
-interface UploadSlot {
-  assetId?: number;
-  url?: string;
-  file?: File;
-}
+// ─── Local types ───────────────────────────────────────────────────────────
 
 interface Props {
   projectId: number;
@@ -57,8 +55,12 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
 
   // ── frame style ──
-  const [frameColor, setFrameColor] = useState<"white" | "black" | "palette">("white");
+  const [frameColor, setFrameColor] = useState<string>("#FFFFFF");
   const [frameThickness, setFrameThickness] = useState<"none" | "thin" | "medium">("thin");
+  const [cornerStyle, setCornerStyle] = useState<"sharp" | "rounded">("sharp");
+  const [activeTab, setActiveTab] = useState<"color" | "width" | "radius">("color");
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showDesignSheet, setShowDesignSheet] = useState(false);
 
   // ── result ──
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,16 +73,45 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
 
   // ── file upload ──
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
   const pendingSlotIndex = useRef<number>(-1);
 
   // ── 프레임 스타일 (공통) ──────────────────────────────────────────────────
   const tc = THICKNESS_CONFIG[frameThickness];
-  const frameColorHex =
-    frameColor === "black"
-      ? "#000000"
-      : frameColor === "palette"
-      ? (selectedApiPalette?.colors[Math.floor((selectedApiPalette?.colors.length ?? 0) / 2)]?.hex ?? "#e0e0e0")
-      : "#FFFFFF";
+  const frameColorHex = frameColor;
+
+  // ── 프레임 스타일 즉시 저장 ──────────────────────────────────────────────
+  const saveStyle = useCallback(
+    (color: string, thickness: "none" | "thin" | "medium", corner: "sharp" | "rounded") => {
+      colorworkService.saveFrameStyle(projectId, { frameColor: color, frameThickness: thickness, cornerStyle: corner }).catch(() => {});
+    },
+    [projectId]
+  );
+
+  // ── 색상 피커 외부 클릭 시 닫기 ──────────────────────────────────────────
+  useEffect(() => {
+    if (!showColorPicker) return;
+    const handler = (e: MouseEvent | TouchEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setShowColorPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
+  }, [showColorPicker]);
+
+  // 색상 피커 닫힐 때 저장
+  const prevShowColorPicker = useRef(false);
+  useEffect(() => {
+    if (prevShowColorPicker.current && !showColorPicker) {
+      saveStyle(frameColor, frameThickness, cornerStyle);
+    }
+    prevShowColorPicker.current = showColorPicker;
+  }, [showColorPicker, frameColor, frameThickness, cornerStyle, saveStyle]);
 
   // ── Fetch palettes ────────────────────────────────────────────────────────
 
@@ -121,6 +152,11 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
           });
           setSlots(restored);
         }
+
+        // Restore frame style
+        if (state.frameColor) setFrameColor(state.frameColor);
+        if (state.frameThickness) setFrameThickness(state.frameThickness as "none" | "thin" | "medium");
+        if (state.cornerStyle) setCornerStyle(state.cornerStyle as "sharp" | "rounded");
 
         // Determine step
         if (initialStep && state.gridType) {
@@ -409,294 +445,57 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   // STEP 3: Upload photos
   // ════════════════════════════════════════════════════════════════════════
 
+
   if (step === 3) {
     const filledCount = slots.filter(Boolean).length;
     const totalSlots = slots.length;
-    const isComplete = filledCount === totalSlots && totalSlots > 0;
 
     return (
       <div className="flex flex-col h-full bg-white animate-slide-left relative">
         <StatusBar theme="dark" />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFileChange}
-        />
         <div className="px-4 py-3 flex justify-between items-center border-b border-gray-100">
           <div className="flex items-center gap-1">
-            <button
-              onClick={goBack}
-              className="p-2 -ml-2 rounded-full hover:bg-gray-100"
-            >
+            <button onClick={goBack} className="p-2 -ml-2 rounded-full hover:bg-gray-100">
               <ChevronLeft />
             </button>
-            <button
-              onClick={openMenu}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-            >
+            <button onClick={openMenu} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
               <Menu size={22} />
             </button>
           </div>
-          <span className="font-bold">
-            {filledCount} / {totalSlots} 채움
-          </span>
+          <span className="font-bold">{filledCount} / {totalSlots} 채움</span>
           <div className="w-20" />
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gray-50 overflow-y-auto">
-          {selectedApiPalette &&
-            (() => {
-              const rep =
-                selectedApiPalette.colors[
-                  Math.floor(selectedApiPalette.colors.length / 2)
-                ];
-              return (
-                <div className="flex items-center gap-3 mb-4 bg-white rounded-2xl px-4 py-2.5 shadow-sm border border-gray-100">
-                  <div
-                    className="w-8 h-8 rounded-lg shrink-0"
-                    style={{ backgroundColor: rep?.hex }}
-                  />
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                      선택한 색상
-                    </p>
-                    <p className="text-sm font-black text-gray-900">
-                      {selectedApiPalette.seed}
-                    </p>
-                  </div>
-                </div>
-              );
-            })()}
-
-          {/* 외부 컨테이너: aspect-ratio로 높이 고정, 배경색 = 선택한 테두리 색 */}
-          <div
-            className={`w-4/5 relative shadow-2xl overflow-hidden ${tc.rounded}`}
-            style={{
-              aspectRatio: gridType ? LAYOUT_CONFIG[gridType].containerStyle.aspectRatio : undefined,
-              backgroundColor: frameColorHex,
-            }}
-          >
-            {/* 내부 그리드 */}
-            <div
-              className="absolute inset-0 grid"
-              style={gridType ? {
-                gridTemplateAreas: LAYOUT_CONFIG[gridType].containerStyle.gridTemplateAreas,
-                gridTemplateColumns: LAYOUT_CONFIG[gridType].containerStyle.gridTemplateColumns,
-                gridTemplateRows: LAYOUT_CONFIG[gridType].containerStyle.gridTemplateRows,
-                gap: `${tc.gap}px`,
-                padding: `${tc.pad}px`,
-              } : undefined}
-            >
-              {slots.map((slot, i) => (
-                <div
-                  key={i}
-                  onClick={() => uploadingIndex === null && handleSlotClick(i)}
-                  className={`relative overflow-hidden cursor-pointer transition-all active:scale-95 ${
-                    slot ? "bg-gray-800" : "bg-gray-100 hover:bg-gray-200"
-                  } flex items-center justify-center min-h-0 min-w-0`}
-                  style={gridType ? { gridArea: LAYOUT_CONFIG[gridType].areas[i] } : undefined}
-                >
-                  {uploadingIndex === i ? (
-                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                      <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    </div>
-                  ) : slot?.url ? (
-                    <img
-                      src={slot.url}
-                      alt="slot"
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                  ) : (
-                    <Camera className="text-gray-400" />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center gap-3">
-            <p className="text-sm text-gray-500">
-              각 프레임을 눌러 사진을 채워주세요!
-            </p>
-            <button
-              onClick={() => setFrameModalStep("confirm")}
-              className="text-xs font-bold text-gray-400 underline underline-offset-2 hover:text-gray-600 transition-colors shrink-0"
-            >
-              프레임 바꾸기
-            </button>
-          </div>
-
-          {/* 테두리 색상 + 두께 선택 */}
-          <div className="mt-4 flex flex-col items-center gap-3">
-            <div className="flex items-center gap-3">
-              {(
-                [
-                  { key: "white" as const, bg: "#FFFFFF", border: true },
-                  { key: "black" as const, bg: "#000000" },
-                  { key: "palette" as const, bg: selectedApiPalette?.colors[Math.floor((selectedApiPalette?.colors.length ?? 0) / 2)]?.hex ?? "#e0e0e0", border: true },
-                ] as { key: "white" | "black" | "palette"; bg: string; border?: boolean }[]
-              ).map(({ key, bg, border }) => (
-                <button
-                  key={key}
-                  onClick={() => setFrameColor(key)}
-                  className={`w-7 h-7 rounded-full transition-all ${
-                    frameColor === key
-                      ? "ring-2 ring-offset-2 ring-gray-800 scale-110"
-                      : "opacity-60 hover:opacity-100"
-                  } ${border ? "border border-gray-300" : ""}`}
-                  style={{ backgroundColor: bg }}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              {[
-                { key: "none" as const, p: 0, g: 0 },
-                { key: "thin" as const, p: 2, g: 1 },
-                { key: "medium" as const, p: 4, g: 2 },
-              ].map(({ key, p, g }) => (
-                <button
-                  key={key}
-                  onClick={() => setFrameThickness(key)}
-                  className={`p-1.5 rounded-xl border-2 transition-all ${
-                    frameThickness === key
-                      ? "border-gray-800 bg-gray-100 shadow-sm"
-                      : "border-gray-300 bg-white hover:border-gray-500"
-                  }`}
-                >
-                  {key === "none" ? (
-                    <div className="w-8 h-8 bg-gray-200 flex items-center justify-center rounded-sm relative">
-                      <div className="w-5 h-0.5 bg-gray-500 rounded-full rotate-45 absolute" />
-                      <div className="w-5 h-0.5 bg-gray-500 rounded-full -rotate-45 absolute" />
-                    </div>
-                  ) : (
-                    <div className="w-8 h-8 bg-gray-200 flex items-center justify-center rounded-sm overflow-hidden" style={{ padding: p }}>
-                      <div className="w-full h-full grid grid-cols-2 grid-rows-2" style={{ gap: g }}>
-                        {[0, 1, 2, 3].map((i) => (
-                          <div key={i} className="bg-gray-500 rounded-[1px]" />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6 pb-safe safe-area-bottom bg-white border-t border-gray-100">
-          <Button
-            size="lg"
-            disabled={!isComplete || isSubmitting}
-            onClick={handleComplete}
-          >
-            {isSubmitting ? "처리 중..." : "완성하기"}
-          </Button>
-        </div>
-
-        {frameModalStep !== "closed" && (
-          <div
-            className="absolute inset-0 z-50 flex items-end bg-black/40"
-            onClick={() => setFrameModalStep("closed")}
-          >
-            <div
-              className="bg-white w-full rounded-t-3xl p-6 pb-safe"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {frameModalStep === "confirm" ? (
-                <>
-                  <div className="flex flex-col items-center text-center mb-6">
-                    <div className="w-14 h-14 bg-orange-50 rounded-full flex items-center justify-center mb-4">
-                      <span className="text-2xl">⚠️</span>
-                    </div>
-                    <h2 className="text-xl font-black text-gray-900">
-                      프레임을 바꾸시겠어요?
-                    </h2>
-                    <p className="text-sm text-gray-500 font-medium mt-2">
-                      기존에 저장된 이미지가 모두 삭제됩니다.
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setFrameModalStep("closed")}
-                      className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-2xl text-sm font-bold hover:bg-gray-200 transition-colors"
-                    >
-                      취소
-                    </button>
-                    <button
-                      onClick={() => setFrameModalStep("select")}
-                      className="flex-1 py-3 bg-black text-white rounded-2xl text-sm font-bold hover:bg-gray-800 transition-colors"
-                    >
-                      프레임 바꾸기
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <h2 className="text-xl font-black mb-4">프레임 수 변경</h2>
-                  <div className="flex flex-col gap-4">
-                    {(
-                      [
-                        { countLabel: "4장", variants: ["G2", "G2_GRID"] as const },
-                        { countLabel: "6장", variants: ["G6", "G6_GRID"] as const },
-                        { countLabel: "9장", variants: ["G3", "G3_GRID"] as const },
-                      ] as const
-                    ).map(({ countLabel, variants }) => (
-                      <div key={countLabel}>
-                        <p className="text-xs font-bold text-gray-400 mb-2">{countLabel}</p>
-                        <div className="flex gap-2">
-                          {variants.map((type) => {
-                            const cfg = LAYOUT_CONFIG[type];
-                            const isSelected = gridType === type;
-                            return (
-                              <button
-                                key={type}
-                                onClick={async () => {
-                                  await handleGridSelect(type);
-                                  setFrameModalStep("closed");
-                                }}
-                                className={`flex-1 border-2 rounded-2xl p-3 flex flex-col items-center gap-2 transition-all ${
-                                  isSelected
-                                    ? "border-black bg-gray-50"
-                                    : "border-gray-100 hover:border-gray-300"
-                                }`}
-                              >
-                                <div
-                                  className="grid gap-[3px]"
-                                  style={{
-                                    gridTemplateAreas: cfg.previewAreas,
-                                    gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
-                                    gridTemplateRows: cfg.containerStyle.gridTemplateRows,
-                                    width: cfg.previewSize.width,
-                                    height: cfg.previewSize.height,
-                                  }}
-                                >
-                                  {cfg.previewCells.map((area) => (
-                                    <div
-                                      key={area}
-                                      className={`rounded-[2px] ${isSelected ? "bg-gray-400" : "bg-gray-200"}`}
-                                      style={{ gridArea: area }}
-                                    />
-                                  ))}
-                                </div>
-                                <span className={`text-xs font-bold ${isSelected ? "text-gray-900" : "text-gray-400"}`}>
-                                  {cfg.label}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
+        <ColorWorkStep3Body
+          slots={slots}
+          selectedApiPalette={selectedApiPalette}
+          gridType={gridType}
+          frameColor={frameColor}
+          frameThickness={frameThickness}
+          cornerStyle={cornerStyle}
+          activeTab={activeTab}
+          showColorPicker={showColorPicker}
+          showDesignSheet={showDesignSheet}
+          frameModalStep={frameModalStep}
+          uploadingIndex={uploadingIndex}
+          isSubmitting={isSubmitting}
+          setFrameColor={(v) => { setFrameColor(v); saveStyle(v, frameThickness, cornerStyle); }}
+          setFrameThickness={(v) => { setFrameThickness(v); saveStyle(frameColor, v, cornerStyle); }}
+          setCornerStyle={(v) => { setCornerStyle(v); saveStyle(frameColor, frameThickness, v); }}
+          setActiveTab={setActiveTab}
+          setShowColorPicker={setShowColorPicker}
+          setShowDesignSheet={setShowDesignSheet}
+          setFrameModalStep={setFrameModalStep}
+          fileInputRef={fileInputRef}
+          colorPickerRef={colorPickerRef}
+          onSlotClick={handleSlotClick}
+          onFileChange={handleFileChange}
+          onComplete={handleComplete}
+          onGridSelect={handleGridSelect}
+        />
       </div>
     );
   }
+
 
   // ════════════════════════════════════════════════════════════════════════
   // STEP 4: Result
@@ -708,8 +507,8 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
     const buildCanvas = async (): Promise<Blob | null> => {
       const bgHex = frameColorHex;
       const OUTPUT_WIDTH = 1080;
-      const PADDING = tc.pad;
-      const GRID_GAP = tc.gap;
+      const PADDING = tc.canvasPad;
+      const GRID_GAP = tc.canvasGap;
 
       const getLayoutCells = (gt: GridLayoutType) => {
         const gw = OUTPUT_WIDTH - 2 * PADDING;
@@ -794,16 +593,13 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
         slots.map(async (slot) => {
           if (!slot?.url) return null;
           try {
-            const res = await fetch(slot.url);
-            const blob = await res.blob();
-            const objUrl = URL.createObjectURL(blob);
             const img = new Image();
-            img.src = objUrl;
+            img.crossOrigin = "anonymous";
+            img.src = slot.url;
             await new Promise<void>((resolve, reject) => {
               img.onload = () => resolve();
               img.onerror = reject;
             });
-            URL.revokeObjectURL(objUrl);
             return img;
           } catch {
             return null;
@@ -815,6 +611,9 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
       canvas.width = OUTPUT_WIDTH;
       canvas.height = outputHeight;
       const ctx = canvas.getContext("2d")!;
+
+      const CELL_RADIUS = cornerStyle === "rounded" ? 56 : 0;
+
       ctx.fillStyle = bgHex;
       ctx.fillRect(0, 0, OUTPUT_WIDTH, outputHeight);
 
@@ -835,8 +634,27 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
           sx = 0;
           sy = (img.naturalHeight - sh) / 2;
         }
-        ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+        if (CELL_RADIUS > 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(x + CELL_RADIUS, y);
+          ctx.lineTo(x + w - CELL_RADIUS, y);
+          ctx.quadraticCurveTo(x + w, y, x + w, y + CELL_RADIUS);
+          ctx.lineTo(x + w, y + h - CELL_RADIUS);
+          ctx.quadraticCurveTo(x + w, y + h, x + w - CELL_RADIUS, y + h);
+          ctx.lineTo(x + CELL_RADIUS, y + h);
+          ctx.quadraticCurveTo(x, y + h, x, y + h - CELL_RADIUS);
+          ctx.lineTo(x, y + CELL_RADIUS);
+          ctx.quadraticCurveTo(x, y, x + CELL_RADIUS, y);
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+          ctx.restore();
+        } else {
+          ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+        }
       });
+
 
       return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
     };
@@ -881,105 +699,31 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
         <StatusBar theme="light" />
         <div className="px-4 py-3 flex justify-between items-center relative z-50">
           <div className="flex items-center gap-1">
-            {initialStep === 4 ? (
-              <button
-                onClick={() => router.push("/recent")}
-                className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"
-              >
-                <ChevronLeft />
-              </button>
-            ) : (
-              <button
-                onClick={() => setStep(3)}
-                className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"
-              >
-                <ChevronLeft />
-              </button>
-            )}
             <button
-              onClick={openMenu}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              onClick={initialStep === 4 ? () => router.push("/recent") : () => setStep(3)}
+              className="p-2 -ml-2 rounded-full hover:bg-gray-100 transition-colors"
             >
+              <ChevronLeft />
+            </button>
+            <button onClick={openMenu} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
               <Menu size={22} />
             </button>
           </div>
           <span className="font-bold text-lg">컬러워크</span>
           <div className="w-10" />
         </div>
-
-        <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto no-scrollbar">
-          {/* 결과 미리보기 */}
-          <div
-            className={`${tc.rounded} shadow-2xl mb-4 w-full max-w-[320px] relative overflow-hidden ring-4 ring-white/20`}
-            style={{
-              aspectRatio: layoutCfg?.containerStyle.aspectRatio ?? "1/1",
-              backgroundColor: frameColorHex,
-            }}
-          >
-            <div
-              className="absolute inset-0 grid overflow-hidden"
-              style={{
-                gridTemplateAreas: layoutCfg?.containerStyle.gridTemplateAreas,
-                gridTemplateColumns: layoutCfg?.containerStyle.gridTemplateColumns,
-                gridTemplateRows: layoutCfg?.containerStyle.gridTemplateRows,
-                gap: `${tc.gap}px`,
-                padding: `${tc.pad}px`,
-              }}
-            >
-              {slots.map((slot, i) => (
-                <div
-                  key={i}
-                  className="relative min-h-0 min-w-0 bg-gray-200 overflow-hidden"
-                  style={{ gridArea: layoutCfg ? LAYOUT_CONFIG[gridType!].areas[i] : undefined }}
-                >
-                  {slot?.url && (
-                    <img
-                      src={slot.url}
-                      alt="filled slot"
-                      className="absolute inset-0 w-full h-full object-cover"
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <p className="text-gray-500 text-sm font-medium text-center mt-1">
-            #컬러워크 #{selectedApiPalette?.colors[0]?.name ?? "mood"} #
-            {slots.length}cuts
-          </p>
-        </div>
-
-        <div className="p-6 pb-safe safe-area-bottom space-y-3 bg-white border-t border-gray-100">
-          <div className="flex gap-3">
-            <button
-              onClick={handleDownload}
-              disabled={isDownloading}
-              className="flex-1 flex items-center justify-center gap-2 py-4 bg-black text-white font-medium rounded-xl shadow-xl hover:bg-gray-900 active:scale-95 transition-all disabled:opacity-50 text-base"
-            >
-              {isDownloading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Download size={18} />
-              )}
-              다운로드
-            </button>
-            <button
-              onClick={handleShare}
-              disabled={isDownloading}
-              className="flex-1 flex items-center justify-center gap-2 py-4 bg-white text-black font-medium rounded-xl shadow border border-gray-200 hover:bg-gray-50 active:scale-95 transition-all disabled:opacity-50 text-base"
-            >
-              <Share2 size={18} />
-              공유
-            </button>
-          </div>
-          <button
-            onClick={() => router.replace("/")}
-            className="w-full py-3 text-gray-500 text-sm font-bold hover:text-gray-800 transition-colors"
-          >
-            홈으로
-          </button>
-        </div>
+        <ColorWorkStep4Body
+          slots={slots}
+          selectedApiPalette={selectedApiPalette}
+          gridType={gridType}
+          frameColorHex={frameColorHex}
+          tc={tc}
+          cornerStyle={cornerStyle}
+          isDownloading={isDownloading}
+          onDownload={handleDownload}
+          onShare={handleShare}
+          onHome={() => router.replace("/")}
+        />
       </div>
     );
   }

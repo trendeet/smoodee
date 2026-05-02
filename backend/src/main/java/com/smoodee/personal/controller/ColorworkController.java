@@ -5,6 +5,7 @@ import com.smoodee.global.security.CustomUserDetails;
 import com.smoodee.personal.domain.GridType;
 import com.smoodee.personal.dto.ColorworkStateResponse;
 import com.smoodee.personal.dto.FrameBindRequest;
+import com.smoodee.personal.dto.FrameStyleRequest;
 import com.smoodee.personal.dto.GridSelectRequest;
 import com.smoodee.personal.dto.PaletteSelectRequest;
 import com.smoodee.personal.dto.PaletteShuffleResponse;
@@ -102,6 +103,18 @@ public class ColorworkController {
       @Valid @RequestBody FrameBindRequest request) {
     Long userId = principal != null ? principal.getUserId() : null;
     colorworkService.bindFrame(projectId, userId, index, request.getAssetId());
+    return ResponseEntity.noContent().build();
+  }
+
+  @Operation(summary = "프레임 스타일 저장 (색상/굵기/모서리)")
+  @PutMapping("/{projectId}/frame-style")
+  public ResponseEntity<Void> saveFrameStyle(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable Long projectId,
+      @RequestBody FrameStyleRequest request) {
+    Long userId = principal != null ? principal.getUserId() : null;
+    colorworkService.saveFrameStyle(projectId, userId,
+        request.getFrameColor(), request.getFrameThickness(), request.getCornerStyle());
     return ResponseEntity.noContent().build();
   }
 

@@ -91,9 +91,23 @@ const GroupScreen = () => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { selectedGroup, setSelectedGroup } = useApp();
-  const { userProfile } = useAuth();
+  const { userProfile, accessToken } = useAuth();
 
   const groupId = selectedGroup?.id ?? null;
+
+  // ── SSE: 멤버 변경 실시간 구독 ───────────────────────────────────────────
+  useEffect(() => {
+    if (!groupId || !accessToken) return;
+    const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+    const es = new EventSource(
+      `${base}/api/v1/groups/${groupId}/events?token=${encodeURIComponent(accessToken)}`
+    );
+    es.addEventListener("member-changed", () => {
+      queryClient.invalidateQueries({ queryKey: ["group", groupId, "members"] });
+    });
+    es.onerror = () => es.close();
+    return () => es.close();
+  }, [groupId, accessToken, queryClient]);
 
   // ── Remote data ─────────────────────────────────────────────────────────
   const { data: group } = useQuery({
@@ -172,6 +186,7 @@ const GroupScreen = () => {
   // ── Local UI state ───────────────────────────────────────────────────────
   const [showInviteToast, setShowInviteToast] = useState(false);
   const [showArchiveToast, setShowArchiveToast] = useState(false);
+  const [showFullToast, setShowFullToast] = useState(false);
   const searchParams = useSearchParams();
   const [activeSubTab, setActiveSubTab] = useState(
     searchParams.get("tab") === "chat" ? "chat" : "status"
@@ -326,7 +341,14 @@ const GroupScreen = () => {
     }
   };
 
+  const MAX_MEMBERS = 8;
+
   const handleInvite = () => {
+    if (memberCount >= MAX_MEMBERS) {
+      setShowFullToast(true);
+      setTimeout(() => setShowFullToast(false), 2500);
+      return;
+    }
     const code = group?.inviteCode;
     if (code && navigator.clipboard)
       navigator.clipboard.writeText(code).catch(() => {});
@@ -569,6 +591,7 @@ const GroupScreen = () => {
       <StatusBar theme="dark" />
       {showInviteToast && <Toast message="초대 코드가 복사되었습니다!" />}
       {showArchiveToast && <Toast message="보관함으로 이동되었습니다!" />}
+      {showFullToast && <Toast message="그룹 인원이 꽉 찼습니다. (최대 8명)" type="error" />}
       {showDuplicateTimeToast && (
         <Toast message="이미 사용 중인 시간이에요" type="error" />
       )}
@@ -827,15 +850,6 @@ const GroupScreen = () => {
               </p>
             </div>
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleInvite}
-            icon={Share2}
-            className="rounded-full border-gray-200 h-8 text-xs"
-          >
-            초대
-          </Button>
           <div className="relative">
             <button
               onClick={() => setShowMoreMenu((v) => !v)}
@@ -1260,7 +1274,7 @@ const GroupScreen = () => {
                   const uploaded = slotAssets[slot.id];
                   const isFilled = !!uploaded;
                   return (
-                    <div key={slot.id} className={`flex flex-col gap-2 ${slot.timeLabel === "소개" ? "mt-2" : ""}`}>
+                    <div key={slot.id} className="flex flex-col gap-2">
                       {/* Card */}
                       <div
                         className="relative rounded-3xl overflow-hidden"

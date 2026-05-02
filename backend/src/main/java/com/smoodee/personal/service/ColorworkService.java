@@ -123,6 +123,14 @@ public class ColorworkService {
   }
 
   @Transactional
+  public void saveFrameStyle(Long projectId, Long userId, String frameColor, String frameThickness, String cornerStyle) {
+    Project project = projectService.getProject(projectId);
+    if (userId != null) projectService.requireOwner(project, userId);
+    PersonalColorworkConfig config = getConfig(projectId);
+    config.updateFrameStyle(frameColor, frameThickness, cornerStyle);
+  }
+
+  @Transactional
   public void bindFrame(Long projectId, Long userId, int frameIndex, Long assetId) {
     Project project = projectService.getProject(projectId);
     if (userId != null) projectService.requireOwner(project, userId);

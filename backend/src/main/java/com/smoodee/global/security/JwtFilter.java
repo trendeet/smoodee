@@ -48,6 +48,11 @@ public class JwtFilter extends OncePerRequestFilter {
     if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
       return bearerToken.substring(7);
     }
+    // SSE 연결용: EventSource는 커스텀 헤더 불가, query param으로 fallback
+    String queryToken = request.getParameter("token");
+    if (StringUtils.hasText(queryToken)) {
+      return queryToken;
+    }
     return null;
   }
 }

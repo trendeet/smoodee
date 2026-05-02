@@ -18,6 +18,9 @@ public class ColorworkStateResponse {
   private final String selectedPaletteJson;
   private final boolean howtoSeen;
   private final List<FrameInfo> frames;
+  private final String frameColor;
+  private final String frameThickness;
+  private final String cornerStyle;
 
   public static ColorworkStateResponse of(
       PersonalColorworkConfig config, List<PersonalFrame> frames, Map<Long, String> assetUrlMap) {
@@ -31,6 +34,9 @@ public class ColorworkStateResponse {
             frames.stream()
                 .map(f -> FrameInfo.of(f, assetUrlMap.get(f.getAssetId())))
                 .collect(Collectors.toList()))
+        .frameColor(config.getFrameColor())
+        .frameThickness(config.getFrameThickness())
+        .cornerStyle(config.getCornerStyle())
         .build();
   }
 

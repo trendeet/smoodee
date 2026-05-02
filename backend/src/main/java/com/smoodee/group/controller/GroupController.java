@@ -16,8 +16,11 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import com.smoodee.group.service.GroupSseService;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,6 +38,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class GroupController {
 
   private final GroupService groupService;
+  private final GroupSseService groupSseService;
   private final UserService userService;
   private final StorageService storageService;
 
@@ -102,6 +106,15 @@ public class GroupController {
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long groupId) {
     groupService.leaveGroup(groupId, principal.getUserId());
     return ResponseEntity.noContent().build();
+  }
+
+  @Operation(summary = "그룹 멤버 변경 이벤트 구독 (SSE)")
+  @GetMapping(value = "/{groupId}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  public SseEmitter subscribeGroupEvents(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable Long groupId) {
+    groupService.requireMember(groupId, principal.getUserId());
+    return groupSseService.subscribe(groupId);
   }
 
   @Operation(summary = "그룹 멤버 목록 조회")

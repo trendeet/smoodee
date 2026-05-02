@@ -18,15 +18,30 @@ const SideMenu = ({ isOpen, onClose }: SideMenuProps) => {
   if (!isOpen) return null;
 
   const activeTab =
-    pathname === "/" ? "home"
-    : pathname.startsWith("/inprogress") ? "inprogress"
-    : pathname.startsWith("/recent") ? "recent"
-    : "";
+    pathname === "/"
+      ? "home"
+      : pathname.startsWith("/inprogress")
+      ? "inprogress"
+      : pathname.startsWith("/recent")
+      ? "recent"
+      : "";
 
   const menuItems = [
     { id: "home", path: "/", icon: Home, label: "홈", public: true },
-    { id: "inprogress", path: "/inprogress", icon: FolderClock, label: "진행 중인 템플릿", public: false },
-    { id: "recent", path: "/recent", icon: Clock, label: "보관함", public: false },
+    {
+      id: "inprogress",
+      path: "/inprogress",
+      icon: FolderClock,
+      label: "진행 중인 활동",
+      public: false,
+    },
+    {
+      id: "recent",
+      path: "/recent",
+      icon: Clock,
+      label: "보관함",
+      public: false,
+    },
   ];
 
   const handleItemClick = (item: { path: string; public: boolean }) => {
@@ -94,9 +109,13 @@ const SideMenu = ({ isOpen, onClose }: SideMenuProps) => {
             {isLoggedIn ? (
               <div
                 className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100"
-                onClick={() => { onClose(); router.push("/mypage"); }}
+                onClick={() => {
+                  onClose();
+                  router.push("/mypage");
+                }}
               >
-                {userProfile?.avatar?.startsWith("http") || userProfile?.avatar?.startsWith("data:") ? (
+                {userProfile?.avatar?.startsWith("http") ||
+                userProfile?.avatar?.startsWith("data:") ? (
                   <div className="w-10 h-10 rounded-full overflow-hidden ring-2 ring-indigo-100 shrink-0">
                     <img
                       src={userProfile.avatar}
@@ -107,7 +126,8 @@ const SideMenu = ({ isOpen, onClose }: SideMenuProps) => {
                 ) : (
                   <div
                     className={`w-10 h-10 rounded-full ${
-                      userProfile?.avatar || "bg-gradient-to-tr from-indigo-500 to-purple-500"
+                      userProfile?.avatar ||
+                      "bg-gradient-to-tr from-indigo-500 to-purple-500"
                     } p-[2px] shrink-0`}
                   >
                     <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
@@ -121,7 +141,10 @@ const SideMenu = ({ isOpen, onClose }: SideMenuProps) => {
                   </p>
                 </div>
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleLogout(); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleLogout();
+                  }}
                   className="text-gray-400 hover:text-red-500 transition-colors shrink-0"
                 >
                   <LogOut size={18} />
@@ -134,12 +157,19 @@ const SideMenu = ({ isOpen, onClose }: SideMenuProps) => {
                     <User size={18} className="text-gray-400" />
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-gray-900">로그인이 필요합니다</p>
-                    <p className="text-[10px] text-gray-500">더 많은 기능을 이용해보세요</p>
+                    <p className="font-bold text-sm text-gray-900">
+                      로그인이 필요합니다
+                    </p>
+                    <p className="text-[10px] text-gray-500">
+                      더 많은 기능을 이용해보세요
+                    </p>
                   </div>
                 </div>
                 <button
-                  onClick={() => { onClose(); router.push("/login"); }}
+                  onClick={() => {
+                    onClose();
+                    router.push("/login");
+                  }}
                   className="w-full py-3 bg-black text-white rounded-xl font-bold text-sm hover:bg-gray-800 transition-colors"
                 >
                   로그인 / 회원가입
