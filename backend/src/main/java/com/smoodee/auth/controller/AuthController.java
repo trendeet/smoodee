@@ -50,7 +50,7 @@ public class AuthController {
             .httpOnly(true)
             .secure(true)
             .sameSite("Lax")
-            .path("/api/v1/auth/token")
+            .path("/api/")
             .maxAge(0)
             .build();
     response.addHeader(HttpHeaders.SET_COOKIE, clear.toString());
