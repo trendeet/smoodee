@@ -60,7 +60,6 @@ public class SecurityConfig {
                         "/oauth2/**",
                         "/login/**",
                         "/api/v1/auth/refresh",
-                        "/api/v1/auth/token",
                         "/api/v1/templates/**",
                         "/actuator/health",
                         "/api/v1/personal/colorwork/**",

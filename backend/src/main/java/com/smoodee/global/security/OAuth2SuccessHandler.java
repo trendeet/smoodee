@@ -46,7 +46,6 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
 
     User user = userService.upsertFromOAuth2(userInfo);
     String refreshToken = authService.createAndSaveRefreshToken(user.getId());
-    String accessToken = jwtProvider.generateAccessToken(user.getId());
 
     ResponseCookie refreshCookie =
         ResponseCookie.from("refreshToken", refreshToken)
@@ -57,17 +56,6 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
             .maxAge(refreshTokenExpiryMs / 1000)
             .build();
     response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
-
-    // accessToken은 60초 수명의 HttpOnly 쿠키로 전달 (URL 노출 방지)
-    ResponseCookie accessCookie =
-        ResponseCookie.from("oauth_access_token", accessToken)
-            .httpOnly(true)
-            .secure(true)
-            .sameSite("Lax")
-            .path("/api/")
-            .maxAge(60)
-            .build();
-    response.addHeader(HttpHeaders.SET_COOKIE, accessCookie.toString());
 
     log.info("OAuth2 login success: userId={}", user.getId());
     response.sendRedirect(frontendRedirectUri);

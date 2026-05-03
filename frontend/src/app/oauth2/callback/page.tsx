@@ -3,17 +3,17 @@
 import { Suspense, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/AuthContext";
-import apiClient from "@/lib/api/apiClient";
+import { authService } from "@/lib/api/authService";
 
 function CallbackHandler() {
   const router = useRouter();
   const { login } = useAuth();
 
   useEffect(() => {
-    apiClient
-      .get<{ data: { accessToken: string } }>("/api/v1/auth/token")
-      .then(({ data }) => {
-        login(data.data.accessToken);
+    authService
+      .refresh()
+      .then(({ accessToken }) => {
+        login(accessToken);
         router.replace("/");
       })
       .catch(() => {
