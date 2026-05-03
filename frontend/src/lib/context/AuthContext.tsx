@@ -3,9 +3,9 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from "react";
 import { userService } from "@/lib/api/userService";
 import { authService } from "@/lib/api/authService";
+import { tokenStore } from "@/lib/api/tokenStore";
 import { UserProfileResponse } from "@/lib/api/types";
 
-const ACCESS_TOKEN_KEY = "smoodee_access_token";
 const AVATAR_KEY = "smoodee_profile_avatar";
 
 interface UserProfile {
@@ -43,26 +43,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
+  // 앱 시작 시 refreshToken 쿠키로 accessToken 복원
   useEffect(() => {
-    const stored = localStorage.getItem(ACCESS_TOKEN_KEY);
-    if (stored) {
-      setAccessToken(stored);
-      setIsLoggedIn(true);
-      // Fetch real profile from server
-      userService
-        .getProfile()
-        .then((res) => setUserProfile(toUserProfile(res)))
-        .catch(() => {
-          // Token may be invalid — clean up
-          localStorage.removeItem(ACCESS_TOKEN_KEY);
-          setAccessToken(null);
-          setIsLoggedIn(false);
-        });
-    }
+    authService
+      .refresh()
+      .then(({ accessToken: token }) => {
+        tokenStore.set(token);
+        setAccessToken(token);
+        setIsLoggedIn(true);
+        return userService.getProfile();
+      })
+      .then((res) => setUserProfile(toUserProfile(res)))
+      .catch(() => {
+        // refreshToken 없거나 만료 → 비로그인 상태 유지
+        tokenStore.set(null);
+        setAccessToken(null);
+        setIsLoggedIn(false);
+      });
   }, []);
 
   const login = async (token: string) => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, token);
+    tokenStore.set(token);
     setAccessToken(token);
     setIsLoggedIn(true);
     try {
@@ -79,7 +80,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       // ignore
     } finally {
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      tokenStore.set(null);
       setAccessToken(null);
       setIsLoggedIn(false);
       setUserProfile(null);
@@ -88,13 +89,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const updateProfile = (profile: Partial<UserProfile>) => {
     if (profile.avatar) {
-      if (profile.avatar.startsWith("data:") || profile.avatar.startsWith("bg-")) {
-        // data URL → persist to localStorage; gradient class → clear saved avatar
-        if (profile.avatar.startsWith("data:")) {
-          localStorage.setItem(AVATAR_KEY, profile.avatar);
-        } else {
-          localStorage.removeItem(AVATAR_KEY);
-        }
+      if (profile.avatar.startsWith("data:")) {
+        localStorage.setItem(AVATAR_KEY, profile.avatar);
+      } else if (profile.avatar.startsWith("bg-")) {
+        localStorage.removeItem(AVATAR_KEY);
       }
     }
     setUserProfile((prev) => (prev ? { ...prev, ...profile } : { name: "User", ...profile }));

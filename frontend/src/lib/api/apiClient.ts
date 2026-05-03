@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from "axios";
+import { tokenStore } from "./tokenStore";
 
-const ACCESS_TOKEN_KEY = "smoodee_access_token";
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
 const apiClient: AxiosInstance = axios.create({
@@ -20,16 +20,14 @@ function onRefreshed(token: string) {
   refreshSubscribers = [];
 }
 
-// Request interceptor: attach access token
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+  const token = tokenStore.get();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Response interceptor: handle 401 with token refresh
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -58,12 +56,12 @@ apiClient.interceptors.response.use(
         { withCredentials: true }
       );
       const newToken: string = data.data.accessToken;
-      localStorage.setItem(ACCESS_TOKEN_KEY, newToken);
+      tokenStore.set(newToken);
       onRefreshed(newToken);
       originalRequest.headers.Authorization = `Bearer ${newToken}`;
       return apiClient(originalRequest);
     } catch {
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      tokenStore.set(null);
       refreshSubscribers = [];
       if (typeof window !== "undefined") {
         window.location.href = "/login";
