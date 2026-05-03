@@ -14,8 +14,6 @@ import com.smoodee.project.domain.ProjectStatus;
 import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.service.ProjectService;
 import com.smoodee.storage.service.StorageService;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.smoodee.template.domain.TemplateType;
 import java.io.IOException;
 import java.security.SecureRandom;
@@ -27,6 +25,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
@@ -60,11 +60,7 @@ public class GroupService {
 
     String inviteCode = generateUniqueInviteCode();
     Group group =
-        Group.builder()
-            .projectId(project.getId())
-            .name(name)
-            .inviteCode(inviteCode)
-            .build();
+        Group.builder().projectId(project.getId()).name(name).inviteCode(inviteCode).build();
     group = groupRepository.save(group);
 
     GroupMember owner =
@@ -103,12 +99,13 @@ public class GroupService {
     groupMemberRepository.save(member);
 
     Long groupId = group.getId();
-    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-      @Override
-      public void afterCommit() {
-        groupSseService.notifyMemberChanged(groupId);
-      }
-    });
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            groupSseService.notifyMemberChanged(groupId);
+          }
+        });
 
     return group;
   }
@@ -152,12 +149,13 @@ public class GroupService {
     }
     groupMemberRepository.delete(member);
 
-    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-      @Override
-      public void afterCommit() {
-        groupSseService.notifyMemberChanged(groupId);
-      }
-    });
+    TransactionSynchronizationManager.registerSynchronization(
+        new TransactionSynchronization() {
+          @Override
+          public void afterCommit() {
+            groupSseService.notifyMemberChanged(groupId);
+          }
+        });
   }
 
   public void requireOwner(Long groupId, Long userId) {
@@ -188,9 +186,10 @@ public class GroupService {
     Group group = getGroup(groupId);
     try {
       String original = file.getOriginalFilename();
-      String ext = (original != null && original.contains("."))
-          ? original.substring(original.lastIndexOf("."))
-          : "";
+      String ext =
+          (original != null && original.contains("."))
+              ? original.substring(original.lastIndexOf("."))
+              : "";
       String key = "groups/" + groupId + "/cover/" + UUID.randomUUID() + ext;
       storageService.put(file.getInputStream(), key, file.getContentType(), file.getSize());
       group.updateCoverImage(key);

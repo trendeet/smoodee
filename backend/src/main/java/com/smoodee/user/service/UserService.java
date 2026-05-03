@@ -34,7 +34,8 @@ public class UserService {
               user.updateFromOAuth2(userInfo.getEmail(), userInfo.getName());
               // 커스텀 업로드 아바타(avatars/로 시작)는 덮어쓰지 않음
               String currentAvatar = user.getAvatarS3Key();
-              boolean hasCustomAvatar = currentAvatar != null && currentAvatar.startsWith("avatars/");
+              boolean hasCustomAvatar =
+                  currentAvatar != null && currentAvatar.startsWith("avatars/");
               if (!hasCustomAvatar && userInfo.getPictureUrl() != null) {
                 user.updateAvatarS3Key(userInfo.getPictureUrl());
               }

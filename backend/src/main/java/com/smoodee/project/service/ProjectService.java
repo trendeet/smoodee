@@ -46,8 +46,8 @@ public class ProjectService {
       return projectRepository.findByUserIdAndTypeAndStatuses(userId, type, statuses);
     }
     // type == null: 개인(소유자 기반) + 그룹(멤버십 기반) 합산
-    List<Project> personal = projectRepository.findByUserIdAndTypeAndStatuses(
-        userId, ProjectType.PERSONAL, statuses);
+    List<Project> personal =
+        projectRepository.findByUserIdAndTypeAndStatuses(userId, ProjectType.PERSONAL, statuses);
     List<Project> group = projectRepository.findGroupProjectsByMembership(userId, statuses);
     List<Project> combined = new ArrayList<>(personal);
     combined.addAll(group);

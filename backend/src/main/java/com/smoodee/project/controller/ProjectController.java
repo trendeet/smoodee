@@ -10,13 +10,13 @@ import com.smoodee.project.dto.ProjectResponse;
 import com.smoodee.project.service.ProjectService;
 import com.smoodee.storage.service.StorageService;
 import com.smoodee.template.domain.TemplateType;
-import java.time.Duration;
 import io.swagger.v3.oas.annotations.Operation;
-import lombok.extern.slf4j.Slf4j;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.Duration;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -60,11 +60,17 @@ public class ProjectController {
                       if (project.getTemplateType() == TemplateType.COLORWORK) {
                         int[] progress = colorworkService.getFrameProgress(project.getId());
                         String thumbnailUrl =
-                            colorworkService.getThumbnailUrl(project.getId(), principal.getUserId());
+                            colorworkService.getThumbnailUrl(
+                                project.getId(), principal.getUserId());
                         String paletteColor = colorworkService.getPaletteColor(project.getId());
                         return ProjectResponse.from(
-                            project, progress[0], progress[1], thumbnailUrl, paletteColor,
-                            colorworkService.getAllFrameUrls(project.getId(), principal.getUserId()),
+                            project,
+                            progress[0],
+                            progress[1],
+                            thumbnailUrl,
+                            paletteColor,
+                            colorworkService.getAllFrameUrls(
+                                project.getId(), principal.getUserId()),
                             colorworkService.getGridType(project.getId()));
                       }
                       if (project.getTemplateType() == TemplateType.DAYSHARE) {
@@ -74,16 +80,25 @@ public class ProjectController {
                                 group -> {
                                   int memberCount =
                                       groupMemberRepository.countByGroupId(group.getId());
-                                  String coverUrl = group.getCoverImageS3Key() != null
-                                      ? storageService.presignGet(group.getCoverImageS3Key(), Duration.ofDays(7))
-                                      : null;
+                                  String coverUrl =
+                                      group.getCoverImageS3Key() != null
+                                          ? storageService.presignGet(
+                                              group.getCoverImageS3Key(), Duration.ofDays(7))
+                                          : null;
                                   return ProjectResponse.from(
-                                      project, group.getId(), group.getName(), memberCount, coverUrl);
+                                      project,
+                                      group.getId(),
+                                      group.getName(),
+                                      memberCount,
+                                      coverUrl);
                                 })
                             .orElseGet(() -> ProjectResponse.from(project));
                       }
                     } catch (Exception e) {
-                      log.warn("Failed to enrich recent project {}: {}", project.getId(), e.getMessage());
+                      log.warn(
+                          "Failed to enrich recent project {}: {}",
+                          project.getId(),
+                          e.getMessage());
                     }
                     return ProjectResponse.from(project);
                   })
@@ -99,7 +114,11 @@ public class ProjectController {
                           colorworkService.getThumbnailUrl(project.getId(), principal.getUserId());
                       String paletteColor = colorworkService.getPaletteColor(project.getId());
                       return ProjectResponse.from(
-                          project, progress[0], progress[1], thumbnailUrl, paletteColor,
+                          project,
+                          progress[0],
+                          progress[1],
+                          thumbnailUrl,
+                          paletteColor,
                           colorworkService.getAllFrameUrls(project.getId(), principal.getUserId()),
                           colorworkService.getGridType(project.getId()));
                     }
@@ -110,9 +129,11 @@ public class ProjectController {
                               group -> {
                                 int memberCount =
                                     groupMemberRepository.countByGroupId(group.getId());
-                                String coverUrl = group.getCoverImageS3Key() != null
-                                    ? storageService.presignGet(group.getCoverImageS3Key(), Duration.ofDays(7))
-                                    : null;
+                                String coverUrl =
+                                    group.getCoverImageS3Key() != null
+                                        ? storageService.presignGet(
+                                            group.getCoverImageS3Key(), Duration.ofDays(7))
+                                        : null;
                                 return ProjectResponse.from(
                                     project, group.getId(), group.getName(), memberCount, coverUrl);
                               })

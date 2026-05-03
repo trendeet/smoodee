@@ -39,10 +39,10 @@ public class ChatController {
       @AuthenticationPrincipal CustomUserDetails principal,
       @PathVariable Long groupId,
       @Valid @RequestBody SendMessageRequest request) {
-    ChatMessage message = chatService.sendMessage(groupId, principal.getUserId(), request.getBody());
-    String userName = userRepository.findById(principal.getUserId())
-        .map(u -> u.getName())
-        .orElse("알 수 없음");
+    ChatMessage message =
+        chatService.sendMessage(groupId, principal.getUserId(), request.getBody());
+    String userName =
+        userRepository.findById(principal.getUserId()).map(u -> u.getName()).orElse("알 수 없음");
     return ResponseEntity.ok(ApiResponse.of(ChatMessageResponse.from(message, userName)));
   }
 
@@ -53,13 +53,17 @@ public class ChatController {
       @PathVariable Long groupId,
       @RequestParam(required = false) Long cursor,
       @RequestParam(defaultValue = "50") int limit) {
-    List<ChatMessage> messages = chatService.listMessages(groupId, principal.getUserId(), cursor, limit);
-    List<Long> userIds = messages.stream().map(ChatMessage::getUserId).distinct().collect(Collectors.toList());
-    Map<Long, String> nameMap = userRepository.findAllById(userIds).stream()
-        .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
-    List<ChatMessageResponse> result = messages.stream()
-        .map(m -> ChatMessageResponse.from(m, nameMap.getOrDefault(m.getUserId(), "알 수 없음")))
-        .collect(Collectors.toList());
+    List<ChatMessage> messages =
+        chatService.listMessages(groupId, principal.getUserId(), cursor, limit);
+    List<Long> userIds =
+        messages.stream().map(ChatMessage::getUserId).distinct().collect(Collectors.toList());
+    Map<Long, String> nameMap =
+        userRepository.findAllById(userIds).stream()
+            .collect(Collectors.toMap(u -> u.getId(), u -> u.getName()));
+    List<ChatMessageResponse> result =
+        messages.stream()
+            .map(m -> ChatMessageResponse.from(m, nameMap.getOrDefault(m.getUserId(), "알 수 없음")))
+            .collect(Collectors.toList());
     return ResponseEntity.ok(ApiResponse.of(result));
   }
 }

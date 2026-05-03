@@ -34,8 +34,10 @@ public class ChatService {
 
     groupService.getMembers(groupId).stream()
         .filter(m -> !m.getUserId().equals(userId))
-        .forEach(m -> notificationService.create(
-            m.getUserId(), NotificationType.NEW_CHAT_MESSAGE, groupId, notifBody));
+        .forEach(
+            m ->
+                notificationService.create(
+                    m.getUserId(), NotificationType.NEW_CHAT_MESSAGE, groupId, notifBody));
 
     return saved;
   }

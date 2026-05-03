@@ -157,14 +157,16 @@ public class SlotService {
   @Transactional
   public void updateCaption(Long groupId, Long slotId, Long userId, String caption) {
     groupService.requireMember(groupId, userId);
-    slotUploadRepository.findBySlotIdAndUserId(slotId, userId)
+    slotUploadRepository
+        .findBySlotIdAndUserId(slotId, userId)
         .ifPresent(upload -> upload.updateCaption(caption));
   }
 
   @Transactional
   public void deleteUpload(Long groupId, Long slotId, Long userId) {
     groupService.requireMember(groupId, userId);
-    slotUploadRepository.findBySlotIdAndUserId(slotId, userId)
+    slotUploadRepository
+        .findBySlotIdAndUserId(slotId, userId)
         .ifPresent(slotUploadRepository::delete);
   }
 
@@ -177,19 +179,21 @@ public class SlotService {
             .collect(Collectors.toMap(SlotUpload::getSlotId, u -> u));
 
     return slots.stream()
-        .map(slot -> {
-          SlotUpload upload = uploadBySlotId.get(slot.getId());
-          if (upload == null) {
-            return SlotResponse.from(slot);
-          }
-          try {
-            Asset asset = assetService.getAsset(upload.getAssetId());
-            String url = assetService.generateDownloadUrl(upload.getAssetId(), userId);
-            return SlotResponse.from(slot, asset.getId(), url, asset.getMime(), upload.getCaption());
-          } catch (Exception e) {
-            return SlotResponse.from(slot);
-          }
-        })
+        .map(
+            slot -> {
+              SlotUpload upload = uploadBySlotId.get(slot.getId());
+              if (upload == null) {
+                return SlotResponse.from(slot);
+              }
+              try {
+                Asset asset = assetService.getAsset(upload.getAssetId());
+                String url = assetService.generateDownloadUrl(upload.getAssetId(), userId);
+                return SlotResponse.from(
+                    slot, asset.getId(), url, asset.getMime(), upload.getCaption());
+              } catch (Exception e) {
+                return SlotResponse.from(slot);
+              }
+            })
         .collect(Collectors.toList());
   }
 

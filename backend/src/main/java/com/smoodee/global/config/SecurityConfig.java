@@ -60,6 +60,7 @@ public class SecurityConfig {
                         "/oauth2/**",
                         "/login/**",
                         "/api/v1/auth/refresh",
+                        "/api/v1/auth/token",
                         "/api/v1/templates/**",
                         "/actuator/health",
                         "/api/v1/personal/colorwork/**",
@@ -86,12 +87,15 @@ public class SecurityConfig {
                                   "code", "UNAUTHORIZED",
                                   "message", "인증이 필요합니다.")));
                     }))
-        .oauth2Login(oauth2 -> oauth2
-            .successHandler(oAuth2SuccessHandler)
-            .failureHandler((request, response, exception) -> {
-              log.error("OAuth2 login failed: {}", exception.getMessage(), exception);
-              response.sendRedirect(getFrontendLoginUri() + "?error=oauth2");
-            }))
+        .oauth2Login(
+            oauth2 ->
+                oauth2
+                    .successHandler(oAuth2SuccessHandler)
+                    .failureHandler(
+                        (request, response, exception) -> {
+                          log.error("OAuth2 login failed: {}", exception.getMessage(), exception);
+                          response.sendRedirect(getFrontendLoginUri() + "?error=oauth2");
+                        }))
         .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();
   }

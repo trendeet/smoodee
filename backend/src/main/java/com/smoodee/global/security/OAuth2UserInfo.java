@@ -32,12 +32,13 @@ public class OAuth2UserInfo {
   @SuppressWarnings("unchecked")
   public static OAuth2UserInfo ofKakao(Map<String, Object> attributes) {
     Map<String, Object> kakaoAccount = (Map<String, Object>) attributes.get("kakao_account");
-    Map<String, Object> profile = kakaoAccount != null
-        ? (Map<String, Object>) kakaoAccount.get("profile") : Map.of();
+    Map<String, Object> profile =
+        kakaoAccount != null ? (Map<String, Object>) kakaoAccount.get("profile") : Map.of();
     String email = kakaoAccount != null ? (String) kakaoAccount.get("email") : null;
     String nickname = (String) profile.getOrDefault("nickname", "카카오유저");
     String picture = (String) profile.get("profile_image_url");
-    return new OAuth2UserInfo("kakao", String.valueOf(attributes.get("id")), email, nickname, picture);
+    return new OAuth2UserInfo(
+        "kakao", String.valueOf(attributes.get("id")), email, nickname, picture);
   }
 
   public static OAuth2UserInfo of(String provider, Map<String, Object> attributes) {

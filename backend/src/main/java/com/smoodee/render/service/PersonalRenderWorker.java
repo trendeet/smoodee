@@ -129,19 +129,19 @@ public class PersonalRenderWorker {
       case G2 -> {
         // 3 equal cols, 2 equal rows — staggered wide pattern
         // Layout: [wide(0-1)][1] / [2][wide(1-2)]
-        int col = (gw - 2 * GRID_GAP) / 3;           // 341
-        int colR = gw - 2 * col - 2 * GRID_GAP;      // 342 (last col absorbs rounding)
+        int col = (gw - 2 * GRID_GAP) / 3; // 341
+        int colR = gw - 2 * col - 2 * GRID_GAP; // 342 (last col absorbs rounding)
         int px0 = PADDING;
         int px1 = PADDING + col + GRID_GAP;
         int px2 = PADDING + 2 * (col + GRID_GAP);
         int py0 = PADDING;
         int py1 = PADDING + col + GRID_GAP;
         yield List.of(
-            new Cell(px0, py0, col * 2 + GRID_GAP, col),              // s0: wide top-left
-            new Cell(px2, py0, colR, col),                              // s1: top-right
-            new Cell(px0, py1, col, col),                               // s2: bottom-left
-            new Cell(px1, py1, col + GRID_GAP + colR, col)             // s3: wide bottom-right
-        );
+            new Cell(px0, py0, col * 2 + GRID_GAP, col), // s0: wide top-left
+            new Cell(px2, py0, colR, col), // s1: top-right
+            new Cell(px0, py1, col, col), // s2: bottom-left
+            new Cell(px1, py1, col + GRID_GAP + colR, col) // s3: wide bottom-right
+            );
       }
       case G6 -> {
         // 3 equal cols, 3 equal rows — editorial
@@ -155,20 +155,20 @@ public class PersonalRenderWorker {
         int py1 = PADDING + col + GRID_GAP;
         int py2 = PADDING + 2 * (col + GRID_GAP);
         yield List.of(
-            new Cell(px0, py0, col, col),                                           // s0
-            new Cell(px1, py0, col, col),                                           // s1
-            new Cell(px2, py0, colR, col),                                          // s2
-            new Cell(px0, py1, col * 2 + GRID_GAP, col * 2 + GRID_GAP),           // s3: 2×2 big
-            new Cell(px2, py1, colR, col),                                          // s4
-            new Cell(px2, py2, colR, col)                                           // s5
-        );
+            new Cell(px0, py0, col, col), // s0
+            new Cell(px1, py0, col, col), // s1
+            new Cell(px2, py0, colR, col), // s2
+            new Cell(px0, py1, col * 2 + GRID_GAP, col * 2 + GRID_GAP), // s3: 2×2 big
+            new Cell(px2, py1, colR, col), // s4
+            new Cell(px2, py2, colR, col) // s5
+            );
       }
       case G3 -> {
         // 4 equal cols, 3 equal rows — staircase wide pattern
         // Row 0: [wide(0-1)][2][3]
         // Row 1: [4][wide(1-2)][5... wait, 4 cols]
         // Actually: [3][wide(1-2)][6]  — per slot numbering below
-        int col = (gw - 3 * GRID_GAP) / 4;   // 254 (perfect)
+        int col = (gw - 3 * GRID_GAP) / 4; // 254 (perfect)
         int px0 = PADDING;
         int px1 = PADDING + (col + GRID_GAP);
         int px2 = PADDING + 2 * (col + GRID_GAP);
@@ -178,16 +178,16 @@ public class PersonalRenderWorker {
         int py2 = PADDING + 2 * (col + GRID_GAP);
         int wide = col * 2 + GRID_GAP;
         yield List.of(
-            new Cell(px0, py0, wide, col),   // s0: wide (cols 0-1)
-            new Cell(px2, py0, col, col),    // s1
-            new Cell(px3, py0, col, col),    // s2
-            new Cell(px0, py1, col, col),    // s3
-            new Cell(px1, py1, wide, col),   // s4: wide (cols 1-2)
-            new Cell(px3, py1, col, col),    // s5
-            new Cell(px0, py2, col, col),    // s6
-            new Cell(px1, py2, col, col),    // s7
-            new Cell(px2, py2, wide, col)    // s8: wide (cols 2-3)
-        );
+            new Cell(px0, py0, wide, col), // s0: wide (cols 0-1)
+            new Cell(px2, py0, col, col), // s1
+            new Cell(px3, py0, col, col), // s2
+            new Cell(px0, py1, col, col), // s3
+            new Cell(px1, py1, wide, col), // s4: wide (cols 1-2)
+            new Cell(px3, py1, col, col), // s5
+            new Cell(px0, py2, col, col), // s6
+            new Cell(px1, py2, col, col), // s7
+            new Cell(px2, py2, wide, col) // s8: wide (cols 2-3)
+            );
       }
       case G2_GRID -> {
         // 2 equal cols, 2 equal rows — 4장 격자
@@ -200,8 +200,7 @@ public class PersonalRenderWorker {
             new Cell(px0, py0, col, col),
             new Cell(px1, py0, col, col),
             new Cell(px0, py1, col, col),
-            new Cell(px1, py1, col, col)
-        );
+            new Cell(px1, py1, col, col));
       }
       case G6_GRID -> {
         // 2 equal cols, 3 equal rows — 6장 격자
@@ -217,8 +216,7 @@ public class PersonalRenderWorker {
             new Cell(px0, py1, col, col),
             new Cell(px1, py1, col, col),
             new Cell(px0, py2, col, col),
-            new Cell(px1, py2, col, col)
-        );
+            new Cell(px1, py2, col, col));
       }
       case G3_GRID -> {
         // 3 equal cols, 3 equal rows — 9장 격자
@@ -238,8 +236,7 @@ public class PersonalRenderWorker {
             new Cell(px2, py1, col, col),
             new Cell(px0, py2, col, col),
             new Cell(px1, py2, col, col),
-            new Cell(px2, py2, col, col)
-        );
+            new Cell(px2, py2, col, col));
       }
     };
   }

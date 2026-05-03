@@ -30,14 +30,15 @@ public class GroupSseService {
     CopyOnWriteArrayList<SseEmitter> list = emitters.get(groupId);
     if (list == null || list.isEmpty()) return;
 
-    list.removeIf(emitter -> {
-      try {
-        emitter.send(SseEmitter.event().name("member-changed").data(""));
-        return false;
-      } catch (IOException e) {
-        return true;
-      }
-    });
+    list.removeIf(
+        emitter -> {
+          try {
+            emitter.send(SseEmitter.event().name("member-changed").data(""));
+            return false;
+          } catch (IOException e) {
+            return true;
+          }
+        });
   }
 
   private void remove(Long groupId, SseEmitter emitter) {

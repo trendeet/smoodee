@@ -1,23 +1,25 @@
 "use client";
 
 import { Suspense, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/context/AuthContext";
+import apiClient from "@/lib/api/apiClient";
 
 function CallbackHandler() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { login } = useAuth();
 
   useEffect(() => {
-    const token = searchParams.get("accessToken");
-    if (token) {
-      login(token);
-      router.replace("/");
-    } else {
-      router.replace("/login?error=oauth_failed");
-    }
-  }, [searchParams, login, router]);
+    apiClient
+      .get<{ data: { accessToken: string } }>("/api/v1/auth/token")
+      .then(({ data }) => {
+        login(data.data.accessToken);
+        router.replace("/");
+      })
+      .catch(() => {
+        router.replace("/login?error=oauth_failed");
+      });
+  }, [login, router]);
 
   return (
     <div className="flex h-[100dvh] items-center justify-center">

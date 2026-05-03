@@ -18,7 +18,6 @@ import com.smoodee.project.domain.ProjectStatus;
 import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.service.ProjectService;
 import com.smoodee.storage.service.StorageService;
-import org.springframework.web.multipart.MultipartFile;
 import com.smoodee.template.domain.TemplateType;
 import java.io.IOException;
 import java.time.Duration;
@@ -32,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
 @Service
@@ -123,7 +123,8 @@ public class ColorworkService {
   }
 
   @Transactional
-  public void saveFrameStyle(Long projectId, Long userId, String frameColor, String frameThickness, String cornerStyle) {
+  public void saveFrameStyle(
+      Long projectId, Long userId, String frameColor, String frameThickness, String cornerStyle) {
     Project project = projectService.getProject(projectId);
     if (userId != null) projectService.requireOwner(project, userId);
     PersonalColorworkConfig config = getConfig(projectId);
@@ -258,13 +259,13 @@ public class ColorworkService {
         .findByProjectId(projectId)
         .filter(c -> c.getThumbnailS3Key() != null)
         .map(c -> storageService.presignGet(c.getThumbnailS3Key(), Duration.ofDays(7)))
-        .orElseGet(() ->
-            frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
-                .filter(f -> f.getAssetId() != null)
-                .findFirst()
-                .map(f -> assetService.generateDownloadUrl(f.getAssetId(), userId))
-                .orElse(null)
-        );
+        .orElseGet(
+            () ->
+                frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
+                    .filter(f -> f.getAssetId() != null)
+                    .findFirst()
+                    .map(f -> assetService.generateDownloadUrl(f.getAssetId(), userId))
+                    .orElse(null));
   }
 
   @Transactional(readOnly = true)

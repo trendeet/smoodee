@@ -29,9 +29,10 @@ public class GroupResponse {
   }
 
   public static GroupResponse from(StorageService storageService, Group group) {
-    String coverImageUrl = group.getCoverImageS3Key() != null
-        ? storageService.presignGet(group.getCoverImageS3Key(), Duration.ofDays(7))
-        : null;
+    String coverImageUrl =
+        group.getCoverImageS3Key() != null
+            ? storageService.presignGet(group.getCoverImageS3Key(), Duration.ofDays(7))
+            : null;
     return GroupResponse.builder()
         .id(group.getId())
         .projectId(group.getProjectId())

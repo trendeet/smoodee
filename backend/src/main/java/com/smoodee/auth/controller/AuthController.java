@@ -10,10 +10,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,6 +26,36 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
   private final AuthService authService;
+
+  @Operation(
+      summary = "OAuth2 AccessToken 교환",
+      description = "oauth_access_token 쿠키를 읽어 accessToken을 반환하고 쿠키를 삭제합니다.")
+  @GetMapping("/token")
+  public ResponseEntity<ApiResponse<TokenResponse>> exchangeOAuthToken(
+      HttpServletRequest request, HttpServletResponse response) {
+    String token = null;
+    if (request.getCookies() != null) {
+      for (Cookie cookie : request.getCookies()) {
+        if ("oauth_access_token".equals(cookie.getName())) {
+          token = cookie.getValue();
+          break;
+        }
+      }
+    }
+    if (token == null) {
+      throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
+    }
+    ResponseCookie clear =
+        ResponseCookie.from("oauth_access_token", "")
+            .httpOnly(true)
+            .secure(true)
+            .sameSite("Lax")
+            .path("/api/v1/auth/token")
+            .maxAge(0)
+            .build();
+    response.addHeader(HttpHeaders.SET_COOKIE, clear.toString());
+    return ResponseEntity.ok(ApiResponse.of(new TokenResponse(token)));
+  }
 
   @Operation(summary = "Access Token 재발급", description = "Refresh 쿠키를 이용해 Access Token을 재발급합니다.")
   @PostMapping("/refresh")
@@ -63,24 +94,26 @@ public class AuthController {
   }
 
   private void setRefreshCookie(HttpServletResponse response, String token) {
-    ResponseCookie cookie = ResponseCookie.from("refreshToken", token)
-        .httpOnly(true)
-        .secure(true)
-        .sameSite("None")
-        .path("/")
-        .maxAge(14 * 24 * 60 * 60)
-        .build();
+    ResponseCookie cookie =
+        ResponseCookie.from("refreshToken", token)
+            .httpOnly(true)
+            .secure(true)
+            .sameSite("None")
+            .path("/")
+            .maxAge(14 * 24 * 60 * 60)
+            .build();
     response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
   }
 
   private void deleteRefreshCookie(HttpServletResponse response) {
-    ResponseCookie cookie = ResponseCookie.from("refreshToken", "")
-        .httpOnly(true)
-        .secure(true)
-        .sameSite("None")
-        .path("/")
-        .maxAge(0)
-        .build();
+    ResponseCookie cookie =
+        ResponseCookie.from("refreshToken", "")
+            .httpOnly(true)
+            .secure(true)
+            .sameSite("None")
+            .path("/")
+            .maxAge(0)
+            .build();
     response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
   }
 }

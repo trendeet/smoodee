@@ -5,13 +5,13 @@ import com.smoodee.user.domain.User;
 import com.smoodee.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import java.io.IOException;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -48,16 +48,28 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
     String refreshToken = authService.createAndSaveRefreshToken(user.getId());
     String accessToken = jwtProvider.generateAccessToken(user.getId());
 
-    ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshToken)
-        .httpOnly(true)
-        .secure(true)
-        .sameSite("None")
-        .path("/")
-        .maxAge(refreshTokenExpiryMs / 1000)
-        .build();
+    ResponseCookie refreshCookie =
+        ResponseCookie.from("refreshToken", refreshToken)
+            .httpOnly(true)
+            .secure(true)
+            .sameSite("None")
+            .path("/")
+            .maxAge(refreshTokenExpiryMs / 1000)
+            .build();
     response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
 
+    // accessToken은 60초 수명의 HttpOnly 쿠키로 전달 (URL 노출 방지)
+    ResponseCookie accessCookie =
+        ResponseCookie.from("oauth_access_token", accessToken)
+            .httpOnly(true)
+            .secure(true)
+            .sameSite("Lax")
+            .path("/api/v1/auth/token")
+            .maxAge(60)
+            .build();
+    response.addHeader(HttpHeaders.SET_COOKIE, accessCookie.toString());
+
     log.info("OAuth2 login success: userId={}", user.getId());
-    response.sendRedirect(frontendRedirectUri + "?accessToken=" + accessToken);
+    response.sendRedirect(frontendRedirectUri);
   }
 }

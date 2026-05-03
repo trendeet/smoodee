@@ -33,8 +33,7 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
           + ") "
           + "ORDER BY p.updatedAt DESC")
   List<Project> findGroupProjectsByMembership(
-      @Param("userId") Long userId,
-      @Param("statuses") List<ProjectStatus> statuses);
+      @Param("userId") Long userId, @Param("statuses") List<ProjectStatus> statuses);
 
   @Query("SELECT p FROM Project p WHERE p.expiresAt < :now AND p.status NOT IN ('DONE', 'EXPIRED')")
   List<Project> findExpiredProjects(@Param("now") LocalDateTime now);

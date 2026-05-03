@@ -13,5 +13,4 @@ public class UpdateSlotRequest {
   private String timeLabel;
 
   private LocalDateTime dueAt;
-
 }

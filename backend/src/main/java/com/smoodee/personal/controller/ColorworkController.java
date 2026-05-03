@@ -113,8 +113,12 @@ public class ColorworkController {
       @PathVariable Long projectId,
       @RequestBody FrameStyleRequest request) {
     Long userId = principal != null ? principal.getUserId() : null;
-    colorworkService.saveFrameStyle(projectId, userId,
-        request.getFrameColor(), request.getFrameThickness(), request.getCornerStyle());
+    colorworkService.saveFrameStyle(
+        projectId,
+        userId,
+        request.getFrameColor(),
+        request.getFrameThickness(),
+        request.getCornerStyle());
     return ResponseEntity.noContent().build();
   }
 

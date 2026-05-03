@@ -14,7 +14,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -39,8 +38,7 @@ public class SlotController {
   @GetMapping("/slots")
   public ResponseEntity<ApiResponse<List<SlotResponse>>> listSlots(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long groupId) {
-    return ResponseEntity.ok(
-        ApiResponse.of(slotService.listSlots(groupId, principal.getUserId())));
+    return ResponseEntity.ok(ApiResponse.of(slotService.listSlots(groupId, principal.getUserId())));
   }
 
   @Operation(summary = "슬롯 추가")
