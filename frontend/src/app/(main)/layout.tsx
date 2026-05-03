@@ -1,12 +1,29 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { UIProvider, useUI } from "@/lib/context/UIContext";
 import SideMenu from "@/components/layout/SideMenu";
 import Toast from "@/components/ui/Toast";
 
+const GUIDE_SKIP_KEY = "smoodee_guide_skip_date";
+
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const { isMenuOpen, closeMenu, showSaveToast } = useUI();
+  const router = useRouter();
+  const pathname = usePathname();
+  const checked = useRef(false);
+
+  useEffect(() => {
+    if (checked.current) return;
+    checked.current = true;
+    if (pathname === "/guide") return;
+    const today = new Date().toISOString().slice(0, 10);
+    const skipDate = localStorage.getItem(GUIDE_SKIP_KEY);
+    if (skipDate !== today) {
+      router.replace("/guide");
+    }
+  }, [pathname, router]);
 
   return (
     <div className="h-[100dvh] w-full bg-[#F2F4F6] flex justify-center font-sans select-none overflow-hidden">

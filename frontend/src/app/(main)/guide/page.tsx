@@ -1,13 +1,24 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, HelpCircle, Grid, Info, Users } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
 
+const GUIDE_SKIP_KEY = "smoodee_guide_skip_date";
+
 const GuideScreen = () => {
   const router = useRouter();
+  const [skipToday, setSkipToday] = useState(false);
+
+  const handleStart = () => {
+    if (skipToday) {
+      const today = new Date().toISOString().slice(0, 10);
+      localStorage.setItem(GUIDE_SKIP_KEY, today);
+    }
+    router.replace("/");
+  };
 
   return (
     <div className="flex flex-col h-full bg-white relative animate-fade-in pb-safe">
@@ -100,10 +111,19 @@ const GuideScreen = () => {
         </div>
       </div>
 
-      <div className="p-6 bg-white border-t border-gray-100 safe-area-bottom sticky bottom-0 z-10">
-        <Button size="lg" onClick={() => router.back()} className="w-full shadow-lg">
+      <div className="p-6 bg-white border-t border-gray-100 safe-area-bottom sticky bottom-0 z-10 space-y-3">
+        <Button size="lg" onClick={handleStart} className="w-full shadow-lg">
           플랫폼 시작하기
         </Button>
+        <label className="flex items-center gap-2.5 cursor-pointer justify-center">
+          <input
+            type="checkbox"
+            checked={skipToday}
+            onChange={(e) => setSkipToday(e.target.checked)}
+            className="w-4 h-4 rounded accent-black cursor-pointer"
+          />
+          <span className="text-sm font-medium text-gray-500">오늘 하루 보지 않기</span>
+        </label>
       </div>
     </div>
   );
