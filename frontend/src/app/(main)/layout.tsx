@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { UIProvider, useUI } from "@/lib/context/UIContext";
 import SideMenu from "@/components/layout/SideMenu";
@@ -12,12 +12,10 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const { isMenuOpen, closeMenu, showSaveToast } = useUI();
   const router = useRouter();
   const pathname = usePathname();
-  const checked = useRef(false);
 
   useEffect(() => {
-    if (checked.current) return;
-    checked.current = true;
     if (pathname === "/guide") return;
+    if (sessionStorage.getItem("guide_dismissed")) return;
     const today = new Date().toISOString().slice(0, 10);
     const skipDate = localStorage.getItem(GUIDE_SKIP_KEY);
     if (skipDate !== today) {

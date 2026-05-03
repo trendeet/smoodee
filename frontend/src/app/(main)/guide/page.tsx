@@ -17,6 +17,7 @@ const GuideScreen = () => {
       const today = new Date().toISOString().slice(0, 10);
       localStorage.setItem(GUIDE_SKIP_KEY, today);
     }
+    sessionStorage.setItem("guide_dismissed", "1");
     router.replace("/");
   };
 
