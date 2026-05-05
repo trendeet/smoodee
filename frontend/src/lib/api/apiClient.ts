@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from "axios";
+import { toast } from "sonner";
 import { tokenStore } from "./tokenStore";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
@@ -70,6 +71,21 @@ apiClient.interceptors.response.use(
     } finally {
       isRefreshing = false;
     }
+  }
+);
+
+// 전역 에러 토스트 인터셉터
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error.response?.status;
+    const message = error.response?.data?.error?.message;
+
+    if (status === 403) toast.error("접근 권한이 없습니다.");
+    else if (status === 404) toast.error("요청한 정보를 찾을 수 없습니다.");
+    else if (status === 500) toast.error(message || "서버 오류가 발생했습니다.");
+
+    return Promise.reject(error);
   }
 );
 

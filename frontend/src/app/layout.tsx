@@ -3,6 +3,7 @@ import "./globals.css";
 import Providers from "./providers";
 import { AuthProvider } from "@/lib/context/AuthContext";
 import { AppProvider } from "@/lib/context/AppContext";
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
   title: "Trender",
@@ -31,6 +32,7 @@ export default function RootLayout({
             </AppProvider>
           </AuthProvider>
         </Providers>
+        <Toaster position="top-center" richColors />
       </body>
     </html>
   );
