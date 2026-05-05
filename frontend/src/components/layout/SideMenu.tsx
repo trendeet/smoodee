@@ -66,7 +66,7 @@ const SideMenu = ({ isOpen, onClose }: SideMenuProps) => {
         onClick={onClose}
       />
       <div className="relative bg-white h-full shadow-2xl flex flex-col animate-drawer-slide overflow-hidden">
-        <div className="min-w-[280px] w-[280px] flex flex-col h-full">
+        <div className="min-w-[280px] w-[280px] flex flex-col h-full overflow-y-auto">
           <div className="p-6 pt-12 pb-8">
             <div className="flex justify-between items-center mb-8">
               <div className="flex items-center gap-2">
@@ -105,7 +105,7 @@ const SideMenu = ({ isOpen, onClose }: SideMenuProps) => {
             </div>
           </div>
 
-          <div className="mt-auto p-6 border-t border-gray-100">
+          <div className="mt-auto p-6 pb-[max(24px,env(safe-area-inset-bottom))] border-t border-gray-100">
             {isLoggedIn ? (
               <div
                 className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100"
