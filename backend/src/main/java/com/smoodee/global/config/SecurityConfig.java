@@ -65,7 +65,8 @@ public class SecurityConfig {
                         "/api/v1/personal/colorwork/**",
                         "/api/v1/projects/*/assets",
                         "/api/v1/render/personal/**",
-                        "/api/v1/render/jobs/**")
+                        "/api/v1/render/jobs/**",
+                        "/api/v1/assets/*/stream")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/v1/templates/**")
                     .permitAll()

@@ -8,6 +8,7 @@ import com.smoodee.group.dto.GroupResponse;
 import com.smoodee.group.dto.JoinGroupRequest;
 import com.smoodee.group.service.GroupService;
 import com.smoodee.group.service.GroupSseService;
+import com.smoodee.render.repository.RenderJobRepository;
 import com.smoodee.storage.service.StorageService;
 import com.smoodee.user.domain.User;
 import com.smoodee.user.service.UserService;
@@ -41,6 +42,7 @@ public class GroupController {
   private final GroupSseService groupSseService;
   private final UserService userService;
   private final StorageService storageService;
+  private final RenderJobRepository renderJobRepository;
 
   @Operation(summary = "그룹 생성")
   @PostMapping
@@ -80,8 +82,29 @@ public class GroupController {
   public ResponseEntity<ApiResponse<GroupResponse>> getGroup(
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long groupId) {
     groupService.requireMember(groupId, principal.getUserId());
+    com.smoodee.group.domain.Group group = groupService.getGroup(groupId);
+    Long latestRenderJobId =
+        group.getProjectId() != null
+            ? renderJobRepository
+                .findTopByProjectIdOrderByCreatedAtDesc(group.getProjectId())
+                .map(job -> job.getId())
+                .orElse(null)
+            : null;
+    String coverImageUrl =
+        group.getCoverImageS3Key() != null
+            ? storageService.presignGet(group.getCoverImageS3Key(), java.time.Duration.ofDays(7))
+            : null;
     return ResponseEntity.ok(
-        ApiResponse.of(GroupResponse.from(storageService, groupService.getGroup(groupId))));
+        ApiResponse.of(
+            GroupResponse.builder()
+                .id(group.getId())
+                .projectId(group.getProjectId())
+                .name(group.getName())
+                .memberCount(group.getMemberCount())
+                .inviteCode(group.getInviteCode())
+                .coverImageUrl(coverImageUrl)
+                .latestRenderJobId(latestRenderJobId)
+                .build()));
   }
 
   @Operation(summary = "그룹 커버 이미지 업로드")

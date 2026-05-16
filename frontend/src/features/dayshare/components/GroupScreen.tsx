@@ -288,22 +288,19 @@ const GroupScreen = () => {
 
   // 새로고침 후에도 기존 렌더 결과 복원
   useEffect(() => {
-    const projectId = selectedGroup?.projectId;
-    if (!projectId) return;
+    const jobId = selectedGroup?.latestRenderJobId;
+    if (!jobId) return;
     renderService
-      .getLatestJobByProject(projectId)
+      .getRenderJob(jobId)
       .then((job) => {
-        if (!job) return;
         setRenderJobId(job.id);
         setRenderStatus(job.status);
         if (job.status === "SUCCEEDED" && job.resultUrl) {
           setResultVideoUrl(job.resultUrl);
         }
       })
-      .catch(() => {
-        // 렌더 이력 없으면 무시
-      });
-  }, [selectedGroup?.projectId]);
+      .catch(() => {});
+  }, [selectedGroup?.latestRenderJobId]);
 
   useEffect(() => {
     if (scrollRef.current) {

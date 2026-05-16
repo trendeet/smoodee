@@ -108,15 +108,9 @@ const DesignTabContent = ({
             )}
             <button
               onClick={() => setShowColorPicker((v) => !v)}
-              className={`relative w-11 h-11 rounded-full border-2 border-dashed transition-all overflow-hidden ${
-                !PRESET_COLORS.includes(frameColor as typeof PRESET_COLORS[number])
-                  ? "scale-110 ring-2 ring-offset-2 ring-gray-700 border-solid border-transparent"
-                  : "border-gray-300"
-              }`}
+              className={`relative w-11 h-11 rounded-full border-2 border-dashed transition-all overflow-hidden border-gray-300`}
               style={{
-                background: PRESET_COLORS.includes(frameColor as typeof PRESET_COLORS[number])
-                  ? "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)"
-                  : frameColor,
+                background: "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)",
               }}
             >
               {PRESET_COLORS.includes(frameColor as typeof PRESET_COLORS[number]) ? (
@@ -259,11 +253,14 @@ const ColorWorkStep3Body = ({
                 key={i}
                 onClick={() => uploadingIndex === null && onSlotClick(i)}
                 className={`relative overflow-hidden cursor-pointer transition-all active:scale-95 ${
-                  slot ? "bg-gray-800" : "bg-gray-100 hover:bg-gray-200"
+                  slot ? "" : "bg-gray-100 hover:bg-gray-200"
                 } flex items-center justify-center min-h-0 min-w-0 ${
                   cornerStyle === "rounded" ? "rounded-2xl" : ""
                 }`}
-                style={gridType ? { gridArea: LAYOUT_CONFIG[gridType].areas[i] } : undefined}
+                style={{
+                  ...(slot ? { backgroundColor: frameColorHex } : {}),
+                  ...(gridType ? { gridArea: LAYOUT_CONFIG[gridType].areas[i] } : {}),
+                }}
               >
                 {uploadingIndex === i ? (
                   <div className="absolute inset-0 bg-black/30 flex items-center justify-center">

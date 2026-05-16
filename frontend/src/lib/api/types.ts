@@ -48,8 +48,10 @@ export interface ProjectResponse {
   totalFrames?: number;
   paletteColor?: string;
   ownerId?: number;
-  frameUrls?: string[];
+  frameUrls?: (string | null)[];
   gridType?: string; // "G2" | "G6" | "G3"
+  frameColor?: string;
+  latestRenderJobId?: number | null;
 }
 
 // Colorwork
@@ -118,6 +120,7 @@ export interface GroupResponse {
   status: string; // "WAITING" | "ACTIVE" | "COMPLETED"
   projectId?: number;
   coverImageUrl?: string;
+  latestRenderJobId?: number | null;
 }
 
 export interface GroupMemberResponse {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, HelpCircle, Grid, Info, Users } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
@@ -12,12 +12,15 @@ const GuideScreen = () => {
   const router = useRouter();
   const [skipToday, setSkipToday] = useState(false);
 
+  useEffect(() => {
+    sessionStorage.setItem("smoodee_guide_seen", "true");
+  }, []);
+
   const handleStart = () => {
     if (skipToday) {
       const today = new Date().toISOString().slice(0, 10);
       localStorage.setItem(GUIDE_SKIP_KEY, today);
     }
-    sessionStorage.setItem("guide_dismissed", "1");
     router.replace("/");
   };
 

@@ -15,13 +15,16 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (pathname === "/guide") return;
-    if (sessionStorage.getItem("guide_dismissed")) return;
+    if (sessionStorage.getItem("smoodee_guide_seen")) return;
     const today = new Date().toISOString().slice(0, 10);
     const skipDate = localStorage.getItem(GUIDE_SKIP_KEY);
-    if (skipDate !== today) {
-      router.replace("/guide");
+    if (skipDate === today) {
+      sessionStorage.setItem("smoodee_guide_seen", "true");
+      return;
     }
-  }, [pathname, router]);
+    router.replace("/guide");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="h-[100dvh] w-full bg-[#F2F4F6] flex justify-center font-sans select-none overflow-hidden">

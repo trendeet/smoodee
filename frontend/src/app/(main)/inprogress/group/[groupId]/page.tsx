@@ -28,6 +28,7 @@ export default function InProgressGroupPage() {
       inviteCode: group.inviteCode,
       memberCount: group.memberCount,
       source: "inprogress",
+      latestRenderJobId: group.latestRenderJobId ?? null,
     });
     setReady(true);
   }, [group]);

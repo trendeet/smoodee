@@ -16,6 +16,7 @@ public class GroupResponse {
   private final int memberCount;
   private final String inviteCode;
   private final String coverImageUrl;
+  private final Long latestRenderJobId;
 
   public static GroupResponse from(Group group) {
     return GroupResponse.builder()

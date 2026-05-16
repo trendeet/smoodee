@@ -11,6 +11,7 @@ interface SelectedGroup {
   currentMemberCount?: number;
   status?: string;
   source?: "home" | "inprogress";
+  latestRenderJobId?: number | null;
 }
 
 interface AppContextType {

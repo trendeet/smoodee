@@ -517,14 +517,17 @@ const InProgressPage = () => {
                             (() => {
                               const cfg = LAYOUT_CONFIG[project.gridType as keyof typeof LAYOUT_CONFIG];
                               const urls = project.frameUrls ?? [];
+                              const bgColor = project.frameColor ?? "#ffffff";
                               return (
                                 <div
-                                  className="w-full h-full grid p-[3px]"
+                                  className="w-full h-full grid"
                                   style={{
                                     gridTemplateAreas: cfg.containerStyle.gridTemplateAreas,
                                     gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
                                     gridTemplateRows: cfg.containerStyle.gridTemplateRows,
-                                    gap: "2px",
+                                    gap: "1px",
+                                    padding: "2px",
+                                    backgroundColor: bgColor,
                                   }}
                                 >
                                   {cfg.areas.map((area, i) => (
@@ -535,12 +538,12 @@ const InProgressPage = () => {
                                     >
                                       {urls[i] ? (
                                         <img
-                                          src={urls[i]}
+                                          src={urls[i]!}
                                           alt=""
                                           className="w-full h-full object-cover"
                                         />
                                       ) : (
-                                        <div className="w-full h-full bg-gray-200" />
+                                        <div className="w-full h-full bg-gray-100" />
                                       )}
                                     </div>
                                   ))}

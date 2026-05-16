@@ -270,10 +270,29 @@ public class ColorworkService {
 
   @Transactional(readOnly = true)
   public List<String> getAllFrameUrls(Long projectId, Long userId) {
-    return frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
-        .filter(f -> f.getAssetId() != null)
-        .map(f -> assetService.generateDownloadUrl(f.getAssetId(), userId))
-        .collect(Collectors.toList());
+    PersonalColorworkConfig config = getConfig(projectId);
+    if (config.getGridType() == null) return List.of();
+    int total =
+        switch (config.getGridType()) {
+          case G2, G2_GRID -> 4;
+          case G6, G6_GRID -> 6;
+          case G3, G3_GRID -> 9;
+        };
+    List<String> result = new java.util.ArrayList<>(java.util.Collections.nCopies(total, null));
+    frameRepository.findByProjectIdOrderByFrameIndex(projectId).stream()
+        .filter(f -> f.getAssetId() != null && f.getFrameIndex() < total)
+        .forEach(
+            f ->
+                result.set(
+                    f.getFrameIndex(), assetService.generateDownloadUrl(f.getAssetId(), userId)));
+    return result;
+  }
+
+  public String getFrameColor(Long projectId) {
+    return configRepository
+        .findByProjectId(projectId)
+        .map(PersonalColorworkConfig::getFrameColor)
+        .orElse(null);
   }
 
   private PersonalColorworkConfig getConfig(Long projectId) {

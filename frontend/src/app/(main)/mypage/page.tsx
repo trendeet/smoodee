@@ -3,6 +3,7 @@
 import React, { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Menu, Settings, User, Camera, Edit3, Heart } from "lucide-react";
+import DayShareSheet from "@/features/dayshare/components/DayShareSheet";
 import StatusBar from "@/components/ui/StatusBar";
 import TemplateCard from "@/features/templates/components/TemplateCard";
 import { useAuth } from "@/lib/context/AuthContext";
@@ -11,6 +12,7 @@ import { useScraps } from "@/hooks/useScraps";
 import { useTemplates } from "@/hooks/useTemplates";
 import { useProjects } from "@/hooks/useProjects";
 import { userService } from "@/lib/api/userService";
+
 
 const MyPageScreen = () => {
   const router = useRouter();
@@ -33,6 +35,7 @@ const MyPageScreen = () => {
   );
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showDayShareSheet, setShowDayShareSheet] = useState(false);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -262,7 +265,7 @@ const MyPageScreen = () => {
                 template={t}
                 onClick={() => {
                   if (t.type === "COLORWORK") router.push("/colorwork");
-                  else if (t.type === "DAY_SHARE") router.push("/day_share");
+                  else if (t.type === "DAYSHARE") setShowDayShareSheet(true);
                 }}
                 isScrapped={true}
               />
@@ -284,6 +287,9 @@ const MyPageScreen = () => {
           </div>
         )}
       </div>
+      {showDayShareSheet && (
+        <DayShareSheet onClose={() => setShowDayShareSheet(false)} />
+      )}
     </div>
   );
 };

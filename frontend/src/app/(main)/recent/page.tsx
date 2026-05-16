@@ -33,49 +33,28 @@ const ColorworkThumbnail = ({
   item,
   className = "",
   contain = false,
+  priority = false,
 }: {
   item: ProjectResponse;
   className?: string;
   contain?: boolean;
+  priority?: boolean;
 }) => {
   if (item.thumbnailUrl) {
     return (
       <img
         src={item.thumbnailUrl}
         alt="colorwork"
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : "auto"}
         className={`${contain ? "max-w-full max-h-full object-contain" : "w-full h-full object-cover"} ${className}`}
       />
     );
   }
-  if (item.frameUrls && item.frameUrls.length > 0 && item.gridType) {
-    const cfg = LAYOUT_CONFIG[item.gridType as keyof typeof LAYOUT_CONFIG];
-    if (cfg) {
-      const aspectRatio = cfg.containerStyle.aspectRatio;
-      return (
-        <div
-          className={`grid ${contain ? "" : "w-full h-full"} ${className}`}
-          style={{
-            gridTemplateAreas: cfg.containerStyle.gridTemplateAreas,
-            gridTemplateColumns: cfg.containerStyle.gridTemplateColumns,
-            gridTemplateRows: cfg.containerStyle.gridTemplateRows,
-            gap: "1px",
-            backgroundColor: item.paletteColor ?? "#e5e7eb",
-            ...(contain ? { aspectRatio, maxWidth: "100%", maxHeight: "100%" } : {}),
-          }}
-        >
-          {item.frameUrls.map((url, i) => (
-            <div key={i} className="overflow-hidden min-h-0 min-w-0" style={{ gridArea: (cfg.areas as readonly string[])[i] }}>
-              <img src={url} alt="" className="w-full h-full object-cover" />
-            </div>
-          ))}
-        </div>
-      );
-    }
-  }
   return (
-    <div className={`w-full h-full flex items-center justify-center ${className}`} style={{ backgroundColor: item.paletteColor ?? "#e5e7eb" }}>
-      <div className="grid grid-cols-2 gap-0.5 w-8 h-8 opacity-40">
-        {[0, 1, 2, 3].map((i) => <div key={i} className="rounded-sm bg-white" />)}
+    <div className={`w-full h-full flex items-center justify-center bg-gray-100 ${className}`}>
+      <div className="grid grid-cols-2 gap-0.5 w-8 h-8 opacity-30">
+        {[0, 1, 2, 3].map((i) => <div key={i} className="rounded-sm bg-gray-400" />)}
       </div>
     </div>
   );
@@ -89,6 +68,14 @@ const RecentScreen = () => {
   const queryClient = useQueryClient();
 
   const [view, setView] = useState<ViewType>("templates");
+  const navigate = (v: ViewType) => {
+    if (["templates", "colorwork", "dayshare"].includes(v)) sessionStorage.setItem("recent_view", v);
+    setView(v);
+  };
+  useEffect(() => {
+    const saved = sessionStorage.getItem("recent_view") as ViewType | null;
+    if (saved && ["templates", "colorwork", "dayshare"].includes(saved)) setView(saved);
+  }, []);
   const [selectedItem, setSelectedItem] = useState<ProjectResponse | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [moreMenuTarget, setMoreMenuTarget] = useState<ProjectResponse | null>(null);
@@ -139,22 +126,20 @@ const RecentScreen = () => {
   };
 
   const handleDayshareDownload = async (item: ProjectResponse) => {
-    if (isDownloading) return;
+    if (isDownloading || !item.latestRenderJobId) return;
     setIsDownloading(true);
     setShowMoreMenu(false);
     try {
-      const job = await renderService.getLatestJobByProject(item.id);
-      if (job?.id) await downloadBlob(await renderService.getDownloadUrl(job.id), `dayshare_${item.id}.mp4`);
+      await downloadBlob(await renderService.getDownloadUrl(item.latestRenderJobId), `dayshare_${item.id}.mp4`);
     } catch { } finally { setIsDownloading(false); }
   };
 
   const handleDayshareShare = async (item: ProjectResponse) => {
-    if (isDownloading) return;
+    if (isDownloading || !item.latestRenderJobId) return;
     setIsDownloading(true);
     setShowMoreMenu(false);
     try {
-      const job = await renderService.getLatestJobByProject(item.id);
-      if (job?.id) await navigator.share?.({ url: await renderService.getShareUrl(job.id), title: "하루공유" });
+      await navigator.share?.({ url: await renderService.getShareUrl(item.latestRenderJobId), title: "하루공유" });
     } catch { } finally { setIsDownloading(false); }
   };
 
@@ -164,7 +149,7 @@ const RecentScreen = () => {
     try {
       await projectService.deleteProject(pendingDelete.id);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      if (view === "colorwork-detail") { setSelectedItem(null); setView("colorwork"); }
+      if (view === "colorwork-detail") { setSelectedItem(null); navigate("colorwork"); }
     } finally { setIsDeleting(false); setPendingDelete(null); }
   };
 
@@ -224,7 +209,7 @@ const RecentScreen = () => {
             </>
           ) : (
             <>
-              <button onClick={() => setView("colorwork")}
+              <button onClick={() => navigate("colorwork")}
                 className="w-full flex items-center gap-4 p-5 border border-gray-100 rounded-3xl hover:bg-gray-50 active:scale-[0.98] transition-all text-left shadow-sm">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-400 to-red-400 flex items-center justify-center shrink-0 shadow-md shadow-orange-100">
                   <Palette className="w-7 h-7 text-white" />
@@ -237,7 +222,7 @@ const RecentScreen = () => {
                 <ChevronLeft className="w-5 h-5 text-gray-300 rotate-180 shrink-0" />
               </button>
 
-              <button onClick={() => setView("dayshare")}
+              <button onClick={() => navigate("dayshare")}
                 className="w-full flex items-center gap-4 p-5 border border-gray-100 rounded-3xl hover:bg-gray-50 active:scale-[0.98] transition-all text-left shadow-sm">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-400 to-cyan-300 flex items-center justify-center shrink-0 shadow-md shadow-blue-100">
                   <Film className="w-7 h-7 text-white" />
@@ -265,7 +250,7 @@ const RecentScreen = () => {
         <StatusBar theme="dark" />
         <div className="px-4 pt-4 pb-3 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <button onClick={() => setView("templates")} className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors">
+            <button onClick={() => navigate("templates")} className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors">
               <ChevronLeft size={24} />
             </button>
             <h1 className="text-xl font-black tracking-tight text-gray-900">컬러워크</h1>
@@ -278,11 +263,11 @@ const RecentScreen = () => {
             </div>
           ) : colorworkItems.length > 0 ? (
             <div className="grid grid-cols-3 gap-0.5">
-              {colorworkItems.map((item) => (
+              {colorworkItems.map((item, idx) => (
                 <button key={item.id}
                   onClick={() => { setSelectedItem(item); setView("colorwork-detail"); }}
                   className="aspect-square overflow-hidden relative active:opacity-80 transition-opacity">
-                  <ColorworkThumbnail item={item} className="absolute inset-0" />
+                  <ColorworkThumbnail item={item} className="absolute inset-0" priority={idx === 0} />
                 </button>
               ))}
             </div>
@@ -309,7 +294,7 @@ const RecentScreen = () => {
 
         {/* 헤더 */}
         <div className="absolute top-0 inset-x-0 z-20 px-2 pt-12 pb-6 flex items-center justify-between bg-gradient-to-b from-black/60 to-transparent">
-          <button onClick={() => { setView("colorwork"); closeMore(); }}
+          <button onClick={() => { navigate("colorwork"); closeMore(); }}
             className="p-2 rounded-full hover:bg-white/10 transition-colors">
             <ChevronLeft className="w-6 h-6 text-white" />
           </button>
@@ -448,7 +433,7 @@ const RecentScreen = () => {
         <StatusBar theme="dark" />
         <div className="px-4 pt-4 pb-3 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <button onClick={() => setView("templates")} className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors">
+            <button onClick={() => navigate("templates")} className="p-2 -ml-2 hover:bg-gray-100 rounded-full transition-colors">
               <ChevronLeft size={24} />
             </button>
             <h1 className="text-xl font-black tracking-tight text-gray-900">하루공유</h1>
@@ -561,7 +546,7 @@ const RecentScreen = () => {
     return (
       <DayshareDetailView
         item={selectedItem}
-        onBack={() => { setView("dayshare"); closeMore(); }}
+        onBack={() => { navigate("dayshare"); closeMore(); }}
         onDownload={handleDayshareDownload}
         onShare={handleDayshareShare}
         isDownloading={isDownloading}

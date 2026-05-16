@@ -11,6 +11,8 @@ import {
   Download,
   Share2,
   Menu,
+  Maximize2,
+  Square,
 } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
@@ -62,6 +64,7 @@ const ColorWorkFlow = () => {
 
   // ── result ──
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [completeError, setCompleteError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [frameColor, setFrameColor] = useState<string>("#FFFFFF");
   const [frameThickness, setFrameThickness] = useState<
@@ -79,9 +82,6 @@ const ColorWorkFlow = () => {
 
   // ── leave confirm (홈 플로우 step 3 뒤로가기) ──
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-
-  // ── login required modal ──
-  const [showLoginRequired, setShowLoginRequired] = useState(false);
 
   // ── 임시저장 완료 modal ──
   const [showSaveComplete, setShowSaveComplete] = useState(false);
@@ -246,27 +246,29 @@ const ColorWorkFlow = () => {
       }
       if (updateUrl) router.replace(`/colorwork?projectId=${pid}`);
 
-      // 모든 슬롯 바인딩 (file은 업로드 후 바인딩, assetId만 있으면 rebind)
-      await Promise.allSettled(
-        slots.map(async (slot, i) => {
-          if (!slot) return;
-          try {
-            let assetId = slot.assetId;
-            if (slot.file) {
-              const asset = await assetService.uploadAsset(pid!, slot.file);
-              assetId = asset.id;
-              setSlots((prev) => {
-                const next = [...prev];
-                next[i] = { assetId: asset.id, url: asset.url };
-                return next;
-              });
-            }
-            if (assetId) {
-              await colorworkService.bindFrame(pid!, i, assetId);
-            }
-          } catch {}
-        })
-      );
+      // 모든 슬롯 바인딩 — 순차 처리로 누락 방지
+      for (let i = 0; i < slots.length; i++) {
+        const slot = slots[i];
+        if (!slot) continue;
+        try {
+          let assetId = slot.assetId;
+          if (slot.file) {
+            const asset = await assetService.uploadAsset(pid!, slot.file);
+            assetId = asset.id;
+            setSlots((prev) => {
+              const next = [...prev];
+              // blob URL 유지 — canvas 렌더링 시 CORS 없이 로딩 가능
+              next[i] = { ...prev[i]!, assetId: asset.id };
+              return next;
+            });
+          }
+          if (assetId) {
+            await colorworkService.bindFrame(pid!, i, assetId);
+          }
+        } catch (e) {
+          console.error(`slot ${i} 저장 실패:`, e);
+        }
+      }
 
       try {
         await colorworkService.saveFrameStyle(pid, { frameColor, frameThickness, cornerStyle });
@@ -438,7 +440,7 @@ const ColorWorkFlow = () => {
         if (!slot?.url) return null;
         try {
           const img = new Image();
-          img.crossOrigin = "anonymous";
+          // blob URL은 same-origin이므로 crossOrigin 불필요
           img.src = slot.url;
           await new Promise<void>((resolve, reject) => {
             img.onload = () => resolve();
@@ -499,7 +501,7 @@ const ColorWorkFlow = () => {
       }
     });
 
-    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
   }, [gridType, slots, frameColorHex, tc, cornerStyle]);
 
   // ── Complete / Render ────────────────────────────────────────────────────
@@ -507,6 +509,7 @@ const ColorWorkFlow = () => {
   const handleComplete = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
+    setCompleteError(null);
     try {
       let pid = projectId;
       if (!pid) {
@@ -518,12 +521,17 @@ const ColorWorkFlow = () => {
       } catch (e) {
         console.error("complete 저장 실패:", e);
       }
-      // 썸네일 업로드 (백그라운드, 실패해도 진행)
-      buildCanvas().then((blob) => {
-        if (blob && pid) {
-          colorworkService.uploadThumbnail(pid, blob).catch(() => {});
-        }
-      });
+      const blob = await buildCanvas();
+      if (!blob) {
+        setCompleteError("이미지 생성에 실패했어요. 다시 시도해주세요.");
+        return;
+      }
+      try {
+        await colorworkService.uploadThumbnail(pid, blob);
+      } catch {
+        setCompleteError("저장에 실패했어요. 다시 시도해주세요.");
+        return;
+      }
       sessionStorage.removeItem("cw_session");
       setStep(4);
     } finally {
@@ -714,9 +722,9 @@ const ColorWorkFlow = () => {
         <div className="flex flex-col h-full bg-white animate-fade-in relative overflow-hidden">
           {/* 실제 플로우 UI를 그대로 복사, pointer-events-none으로 freeze */}
           <div className="absolute inset-0 pointer-events-none flex flex-col bg-white z-0">
-            <StatusBar theme="dark" />
-            {/* 네비바: 어둡게 */}
+            {/* StatusBar + 네비바: 함께 어둡게 */}
             <div className="relative">
+              <StatusBar theme="dark" />
               <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
                 <div className="flex items-center gap-3">
                   <div className="p-2 -ml-2">
@@ -732,20 +740,24 @@ const ColorWorkFlow = () => {
             {/* 제목: 어둡게 */}
             <div className="relative">
               <div className="px-6 pt-6 pb-2">
-                <div className="mb-6 p-2 -ml-2 w-fit">
-                  <ChevronLeft />
+                <div className="flex items-start gap-2">
+                  <div className="mt-1 p-2 -ml-2 shrink-0">
+                    <ChevronLeft />
+                  </div>
+                  <div>
+                    <h1 className="text-3xl font-black leading-tight text-gray-900 mb-2 tracking-tight">
+                      오늘 당신의
+                      <br />
+                      <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
+                        무드
+                      </span>
+                      는 어떤가요?
+                    </h1>
+                    <p className="text-gray-500 text-sm font-medium">
+                      가장 끌리는 팔레트를 선택해주세요.
+                    </p>
+                  </div>
                 </div>
-                <h1 className="text-3xl font-black leading-tight text-gray-900 mb-2 tracking-tight">
-                  오늘 당신의
-                  <br />
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
-                    무드
-                  </span>
-                  는 어떤가요?
-                </h1>
-                <p className="text-gray-500 text-sm font-medium">
-                  가장 끌리는 팔레트를 선택해주세요.
-                </p>
               </div>
               <div className="absolute inset-0 bg-black/35 z-10" />
             </div>
@@ -787,9 +799,9 @@ const ColorWorkFlow = () => {
       return (
         <div className="flex flex-col h-full bg-white animate-fade-in relative overflow-hidden">
           <div className="absolute inset-0 pointer-events-none flex flex-col bg-white z-0">
-            <StatusBar theme="dark" />
-            {/* 네비바: 어둡게 */}
+            {/* StatusBar + 네비바: 함께 어둡게 */}
             <div className="relative">
+              <StatusBar theme="dark" />
               <div className="px-4 py-3 flex items-center gap-3 border-b border-gray-100">
                 <div className="p-2 -ml-2">
                   <Menu size={24} />
@@ -803,15 +815,19 @@ const ColorWorkFlow = () => {
             {/* 제목: 어둡게 */}
             <div className="relative">
               <div className="px-6 pt-6 pb-6">
-                <div className="mb-6 p-2 -ml-2 w-fit">
-                  <ChevronLeft />
+                <div className="flex items-start gap-2">
+                  <div className="mt-1 p-2 -ml-2 shrink-0">
+                    <ChevronLeft />
+                  </div>
+                  <div>
+                    <h1 className="text-3xl font-black mb-2">
+                      몇 장의 사진을
+                      <br />
+                      담을까요?
+                    </h1>
+                    <p className="text-gray-500">원하는 레이아웃을 선택해주세요.</p>
+                  </div>
                 </div>
-                <h1 className="text-3xl font-black mb-2">
-                  몇 장의 사진을
-                  <br />
-                  담을까요?
-                </h1>
-                <p className="text-gray-500">원하는 레이아웃을 선택해주세요.</p>
               </div>
               <div className="absolute inset-0 bg-black/35 z-10" />
             </div>
@@ -928,20 +944,16 @@ const ColorWorkFlow = () => {
       return (
         <div className="flex flex-col h-full bg-white animate-fade-in relative overflow-hidden">
           <div className="absolute inset-0 pointer-events-none flex flex-col bg-white z-0">
-            <StatusBar theme="dark" />
-            {/* 헤더: 어둡게 (임시저장 없음) */}
+            {/* StatusBar + 헤더: 함께 어둡게 */}
             <div className="relative">
+              <StatusBar theme="dark" />
               <div className="px-4 py-3 flex justify-between items-center border-b border-gray-100">
                 <div className="flex items-center gap-1">
-                  <div className="p-2 -ml-2">
-                    <ChevronLeft />
-                  </div>
-                  <div className="p-2">
-                    <Menu size={22} />
-                  </div>
+                  <div className="p-2 -ml-2"><ChevronLeft /></div>
+                  <div className="p-2"><Menu size={22} /></div>
                 </div>
                 <span className="font-bold">3 / 4 채움</span>
-                <div className="w-16" />
+                <div className="w-20" />
               </div>
               <div className="absolute inset-0 bg-black/35 z-10" />
             </div>
@@ -1012,61 +1024,45 @@ const ColorWorkFlow = () => {
               <div className="relative z-20 flex justify-center w-full">
                 {gTooltip("이미지를 채워주세요!")}
               </div>
-              {/* 색상·굵기 컨트롤: 스포트라이트 + 툴팁 */}
-              <div className="relative z-20 mt-4 flex flex-col items-center gap-3">
-                <div className="flex items-center gap-3">
+              {/* 디자인 옵션 컨트롤: 스포트라이트 + 툴팁 */}
+              <div className="relative z-20 mt-4 w-full bg-white rounded-2xl px-4 py-3 shadow-sm border border-gray-100">
+                {/* 탭 - 실제 UI와 동일 */}
+                <div className="flex justify-around bg-gray-50 p-1.5 rounded-2xl mb-1">
                   {[
-                    { bg: "#FFFFFF", border: true },
-                    { bg: "#000000" },
-                    { bg: "#E8553A", border: true },
-                  ].map(({ bg, border }, i) => (
+                    { icon: <Palette size={15} />, label: "색상" },
+                    { icon: <Maximize2 size={15} />, label: "굵기" },
+                    { icon: <Square size={15} />, label: "모서리" },
+                  ].map(({ icon, label }, i) => (
                     <div
                       key={i}
-                      className={`w-7 h-7 rounded-full ${
-                        i === 0
-                          ? "ring-2 ring-offset-2 ring-gray-800 scale-110"
-                          : "opacity-60"
-                      } ${border ? "border border-gray-300" : ""}`}
-                      style={{ backgroundColor: bg }}
-                    />
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  {[0, 1, 2].map((i) => (
-                    <div
-                      key={i}
-                      className={`p-1.5 rounded-xl border-2 ${
-                        i === 1
-                          ? "border-gray-800 bg-gray-100"
-                          : "border-gray-300 bg-white"
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm ${
+                        i === 0 ? "bg-white shadow-sm text-gray-900 font-bold" : "text-gray-400 font-medium"
                       }`}
                     >
-                      {i === 0 ? (
-                        <div className="w-8 h-8 bg-gray-200 flex items-center justify-center rounded-sm relative">
-                          <div className="w-5 h-0.5 bg-gray-500 rounded-full rotate-45 absolute" />
-                          <div className="w-5 h-0.5 bg-gray-500 rounded-full -rotate-45 absolute" />
-                        </div>
-                      ) : (
-                        <div
-                          className="w-8 h-8 bg-gray-200 flex items-center justify-center rounded-sm overflow-hidden"
-                          style={{ padding: i * 2 }}
-                        >
-                          <div
-                            className="w-full h-full grid grid-cols-2 grid-rows-2"
-                            style={{ gap: i }}
-                          >
-                            {[0, 1, 2, 3].map((j) => (
-                              <div
-                                key={j}
-                                className="bg-gray-500 rounded-[1px]"
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      {icon}{label}
                     </div>
                   ))}
                 </div>
+                {/* 색상 프리셋 - 실제 UI와 동일 */}
+                <div className="h-16 flex items-center justify-center">
+                  <div className="flex items-center gap-3">
+                    {["#FFFFFF", "#E0E0E0", "#9E9E9E", "#424242", "#000000"].map((hex, i) => (
+                      <div
+                        key={i}
+                        className={`w-11 h-11 rounded-full transition-all ${
+                          i === 0 ? "scale-110 ring-2 ring-offset-2 ring-gray-700" : "opacity-70"
+                        } ${hex === "#FFFFFF" || hex === "#E0E0E0" ? "border border-gray-200" : ""}`}
+                        style={{ backgroundColor: hex }}
+                      />
+                    ))}
+                    <div
+                      className="w-11 h-11 rounded-full border-2 border-dashed border-gray-300 overflow-hidden"
+                      style={{ background: "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)" }}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="relative z-20 flex justify-center w-full">
                 {gTooltip("테두리 색상과 굵기를 선택해주세요!")}
               </div>
             </div>
@@ -1417,12 +1413,8 @@ const ColorWorkFlow = () => {
           <span className="font-bold">
             {filledCount} / {totalSlots} 채움
           </span>
-          <button
+          {isLoggedIn && <button
             onClick={async () => {
-              if (!isLoggedIn) {
-                setShowLoginRequired(true);
-                return;
-              }
               let pid = projectId;
               if (!pid) {
                 setIsCreating(true);
@@ -1444,7 +1436,7 @@ const ColorWorkFlow = () => {
             className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
           >
             임시저장
-          </button>
+          </button>}
         </div>
         <ColorWorkStep3Body
           slots={slots}
@@ -1473,23 +1465,6 @@ const ColorWorkFlow = () => {
           onComplete={handleComplete}
           onGridSelect={handleGridSelect}
           extraModals={<>
-            {showLoginRequired && (
-              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
-                onClick={() => setShowLoginRequired(false)}>
-                <div className="bg-white w-full rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex flex-col items-center text-center mb-6">
-                    <h2 className="text-xl font-black text-gray-900">로그인이 필요해요</h2>
-                    <p className="text-sm text-gray-500 font-medium mt-2">임시저장은 로그인 후 이용할 수 있어요.</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <button onClick={() => setShowLoginRequired(false)}
-                      className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-2xl text-sm font-bold hover:bg-gray-200 transition-colors">취소</button>
-                    <button onClick={() => router.push("/login")}
-                      className="flex-1 py-3 bg-black text-white rounded-2xl text-sm font-bold hover:bg-gray-800 transition-colors">로그인하기</button>
-                  </div>
-                </div>
-              </div>
-            )}
             {showSaveComplete && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
                 onClick={() => setShowSaveComplete(false)}>
@@ -1511,6 +1486,24 @@ const ColorWorkFlow = () => {
               </div>
             )}
             {renderLeaveModal()}
+            {completeError && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
+                onClick={() => setCompleteError(null)}>
+                <div className="bg-white w-full rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex flex-col items-center text-center mb-6">
+                    <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                      <span className="text-2xl">⚠️</span>
+                    </div>
+                    <h2 className="text-lg font-black text-gray-900">완성하기 실패</h2>
+                    <p className="text-sm text-gray-500 font-medium mt-2 break-keep">{completeError}</p>
+                  </div>
+                  <button onClick={() => setCompleteError(null)}
+                    className="w-full py-3 bg-black text-white rounded-2xl text-sm font-bold">
+                    확인
+                  </button>
+                </div>
+              </div>
+            )}
           </>}
         />
       </div>

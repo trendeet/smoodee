@@ -27,6 +27,23 @@ public class ProjectResponse {
   private final Long ownerId;
   private final List<String> frameUrls;
   private final String gridType;
+  private final String frameColor;
+  private final Long latestRenderJobId;
+
+  public static ProjectResponse fromWithThumbnail(Project project, String thumbnailUrl) {
+    return ProjectResponse.builder()
+        .id(project.getId())
+        .title(project.getTitle())
+        .type(project.getType().name())
+        .templateType(project.getTemplateType().name())
+        .status(project.getStatus().name())
+        .createdAt(project.getCreatedAt())
+        .updatedAt(project.getUpdatedAt())
+        .expiresAt(project.getExpiresAt())
+        .thumbnailUrl(thumbnailUrl)
+        .ownerId(project.getUserId())
+        .build();
+  }
 
   public static ProjectResponse from(Project project) {
     return ProjectResponse.builder()
@@ -43,7 +60,12 @@ public class ProjectResponse {
   }
 
   public static ProjectResponse from(
-      Project project, Long groupId, String groupName, int memberCount, String thumbnailUrl) {
+      Project project,
+      Long groupId,
+      String groupName,
+      int memberCount,
+      String thumbnailUrl,
+      Long latestRenderJobId) {
     return ProjectResponse.builder()
         .id(project.getId())
         .title(groupName)
@@ -57,6 +79,7 @@ public class ProjectResponse {
         .memberCount(memberCount)
         .thumbnailUrl(thumbnailUrl)
         .ownerId(project.getUserId())
+        .latestRenderJobId(latestRenderJobId)
         .build();
   }
 
@@ -67,7 +90,8 @@ public class ProjectResponse {
       String thumbnailUrl,
       String paletteColor,
       List<String> frameUrls,
-      String gridType) {
+      String gridType,
+      String frameColor) {
     return ProjectResponse.builder()
         .id(project.getId())
         .title(project.getTitle())
@@ -84,6 +108,7 @@ public class ProjectResponse {
         .ownerId(project.getUserId())
         .frameUrls(frameUrls)
         .gridType(gridType)
+        .frameColor(frameColor)
         .build();
   }
 }

@@ -11,6 +11,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.16.0",
+    "html2canvas": "^1.4.1",
     "lucide-react": "^0.469.0",
     "next": "^15.5.18",
     "react": "^19.0.0",
@@ -18,6 +19,13 @@
     "react-dom": "^19.0.0",
     "sonner": "^2.0.7"
   },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions",
+    "last 2 Edge versions",
+    "not IE 11"
+  ],
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",

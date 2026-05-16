@@ -18,6 +18,8 @@ import ColorWorkStep3Body from "./ColorWorkStep3Body";
 import ColorWorkStep4Body from "./ColorWorkStep4Body";
 import { colorworkService } from "@/lib/api/colorworkService";
 import { assetService } from "@/lib/api/assetService";
+
+
 import { useUI } from "@/lib/context/UIContext";
 import { ColorPalette as ApiColorPalette } from "@/lib/api/types";
 import { GridLayoutType, LAYOUT_CONFIG, THICKNESS_CONFIG } from "../layoutConfig";
@@ -64,9 +66,12 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
 
   // ── result ──
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [completeError, setCompleteError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
   // ── frame modal ──
+  const [showSaveComplete, setShowSaveComplete] = useState(false);
+
   const [frameModalStep, setFrameModalStep] = useState<
     "closed" | "confirm" | "select"
   >("closed");
@@ -79,6 +84,90 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   // ── 프레임 스타일 (공통) ──────────────────────────────────────────────────
   const tc = THICKNESS_CONFIG[frameThickness];
   const frameColorHex = frameColor;
+
+  // ── Canvas 빌드 (ColorWorkFlow와 동일) ──────────────────────────────────
+  const buildCanvas = useCallback(async (): Promise<Blob | null> => {
+    if (!gridType) return null;
+    const bgHex = frameColorHex;
+    const OUTPUT_WIDTH = 1080;
+    const PADDING = tc.canvasPad;
+    const GRID_GAP = tc.canvasGap;
+    const getLayoutCells = (gt: GridLayoutType) => {
+      const gw = OUTPUT_WIDTH - 2 * PADDING;
+      if (gt === "G2_GRID") {
+        const col = Math.floor((gw - GRID_GAP) / 2);
+        const col1 = gw - col - GRID_GAP; const row = col;
+        return [{ x: PADDING, y: PADDING, w: col, h: row }, { x: PADDING+col+GRID_GAP, y: PADDING, w: col1, h: row }, { x: PADDING, y: PADDING+row+GRID_GAP, w: col, h: row }, { x: PADDING+col+GRID_GAP, y: PADDING+row+GRID_GAP, w: col1, h: row }];
+      } else if (gt === "G6_GRID") {
+        const col = Math.floor((gw - GRID_GAP) / 2); const col1 = gw - col - GRID_GAP; const row = Math.floor((col * 3 - 2 * GRID_GAP) / 3); const cells = [];
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) cells.push({ x: PADDING+c*(col+GRID_GAP), y: PADDING+r*(row+GRID_GAP), w: c===0?col:col1, h: row });
+        return cells;
+      } else if (gt === "G3_GRID") {
+        const col = Math.floor((gw - 2*GRID_GAP) / 3); const colR = gw-2*col-2*GRID_GAP; const cells = [];
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) cells.push({ x: PADDING+c*(col+GRID_GAP), y: PADDING+r*(col+GRID_GAP), w: c===2?colR:col, h: col });
+        return cells;
+      } else if (gt === "G2") {
+        const col = Math.floor((gw-2*GRID_GAP)/3); const colR = gw-2*col-2*GRID_GAP;
+        const px0=PADDING,px1=PADDING+col+GRID_GAP,px2=PADDING+2*(col+GRID_GAP); const py0=PADDING,py1=PADDING+col+GRID_GAP;
+        return [{ x:px0,y:py0,w:col*2+GRID_GAP,h:col },{ x:px2,y:py0,w:colR,h:col },{ x:px0,y:py1,w:col,h:col },{ x:px1,y:py1,w:col+GRID_GAP+colR,h:col }];
+      } else if (gt === "G6") {
+        const col = Math.floor((gw-2*GRID_GAP)/3); const colR = gw-2*col-2*GRID_GAP;
+        const px0=PADDING,px1=PADDING+col+GRID_GAP,px2=PADDING+2*(col+GRID_GAP); const py0=PADDING,py1=PADDING+col+GRID_GAP,py2=PADDING+2*(col+GRID_GAP);
+        return [{ x:px0,y:py0,w:col,h:col },{ x:px1,y:py0,w:col,h:col },{ x:px2,y:py0,w:colR,h:col },{ x:px0,y:py1,w:col*2+GRID_GAP,h:col*2+GRID_GAP },{ x:px2,y:py1,w:colR,h:col },{ x:px2,y:py2,w:colR,h:col }];
+      } else {
+        const col = Math.floor((gw-3*GRID_GAP)/4); const wide = col*2+GRID_GAP;
+        const px0=PADDING,px1=PADDING+col+GRID_GAP,px2=PADDING+2*(col+GRID_GAP),px3=PADDING+3*(col+GRID_GAP); const py0=PADDING,py1=PADDING+col+GRID_GAP,py2=PADDING+2*(col+GRID_GAP);
+        return [{ x:px0,y:py0,w:wide,h:col },{ x:px2,y:py0,w:col,h:col },{ x:px3,y:py0,w:col,h:col },{ x:px0,y:py1,w:col,h:col },{ x:px1,y:py1,w:wide,h:col },{ x:px3,y:py1,w:col,h:col },{ x:px0,y:py2,w:col,h:col },{ x:px1,y:py2,w:col,h:col },{ x:px2,y:py2,w:wide,h:col }];
+      }
+    };
+    const cells = getLayoutCells(gridType);
+    const maxBottom = Math.max(...cells.map((c) => c.y + c.h));
+    const outputHeight = maxBottom + PADDING;
+
+    console.log("[buildCanvas] slots:", slots.map((s, i) => ({
+      index: i,
+      hasSlot: !!s,
+      urlType: s?.url?.startsWith("blob:") ? "blob" : s?.url ? "s3" : "없음",
+      assetId: s?.assetId,
+    })));
+
+    const images = await Promise.all(
+      slots.map(async (slot, i) => {
+        if (!slot?.url) { console.log(`[buildCanvas] slot[${i}] url 없음 → skip`); return null; }
+        try {
+          const img = new Image();
+          img.src = slot.url; // blob URL — same-origin, CORS 불필요
+          await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = () => { console.error(`[buildCanvas] slot[${i}] 로드 실패`); reject(); }; });
+          console.log(`[buildCanvas] slot[${i}] 로드 성공 ${img.naturalWidth}x${img.naturalHeight}`);
+          return img;
+        } catch { return null; }
+      })
+    );
+
+    console.log("[buildCanvas] 최종 로드된 이미지 수:", images.filter(Boolean).length, "/", images.length);
+    const canvas = document.createElement("canvas");
+    canvas.width = OUTPUT_WIDTH; canvas.height = outputHeight;
+    const ctx = canvas.getContext("2d")!;
+    const CELL_RADIUS = cornerStyle === "rounded" ? 56 : 0;
+    ctx.fillStyle = bgHex; ctx.fillRect(0, 0, OUTPUT_WIDTH, outputHeight);
+    images.forEach((img, i) => {
+      if (!img || !cells[i]) return;
+      const { x, y, w, h } = cells[i];
+      const srcAspect = img.naturalWidth / img.naturalHeight; const targetAspect = w / h;
+      let sx: number, sy: number, sw: number, sh: number;
+      if (srcAspect > targetAspect) { sh = img.naturalHeight; sw = sh * targetAspect; sy = 0; sx = (img.naturalWidth - sw) / 2; }
+      else { sw = img.naturalWidth; sh = sw / targetAspect; sx = 0; sy = (img.naturalHeight - sh) / 2; }
+      if (CELL_RADIUS > 0) {
+        ctx.save(); ctx.beginPath();
+        ctx.moveTo(x+CELL_RADIUS,y); ctx.lineTo(x+w-CELL_RADIUS,y); ctx.quadraticCurveTo(x+w,y,x+w,y+CELL_RADIUS);
+        ctx.lineTo(x+w,y+h-CELL_RADIUS); ctx.quadraticCurveTo(x+w,y+h,x+w-CELL_RADIUS,y+h);
+        ctx.lineTo(x+CELL_RADIUS,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-CELL_RADIUS);
+        ctx.lineTo(x,y+CELL_RADIUS); ctx.quadraticCurveTo(x,y,x+CELL_RADIUS,y);
+        ctx.closePath(); ctx.clip(); ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h); ctx.restore();
+      } else { ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h); }
+    });
+    return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+  }, [gridType, slots, frameColorHex, tc, cornerStyle]);
 
   // ── 프레임 스타일 즉시 저장 ──────────────────────────────────────────────
   const saveStyle = useCallback(
@@ -128,9 +217,10 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   // ── On mount: restore state ───────────────────────────────────────────────
 
   useEffect(() => {
-    colorworkService
-      .getState(projectId)
-      .then((state) => {
+    (async () => {
+    try {
+      const state = await colorworkService.getState(projectId);
+      {
         // Restore palette
         if (state.selectedPaletteSeed && state.selectedColors) {
           setSelectedApiPalette({
@@ -139,17 +229,29 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
           });
         }
 
-        // Restore grid and slots — backend only knows G2/G6/G3, map to base types
+        // Restore grid and slots — S3 URL → blob URL 변환으로 ColorWorkFlow와 동일하게 처리
         if (state.gridType) {
           const gt = state.gridType as GridLayoutType;
           setGridType(gt);
           const slotCount = LAYOUT_CONFIG[gt].slotCount;
           const restored: (UploadSlot | null)[] = Array(slotCount).fill(null);
-          state.frames.forEach((f) => {
-            if (f && f.index < slotCount) {
-              restored[f.index] = { assetId: f.assetId, url: f.assetUrl };
-            }
-          });
+          await Promise.all(
+            state.frames.map(async (f) => {
+              if (!f || f.index >= slotCount || !f.assetId) return;
+              const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080").replace(/\/$/, "");
+              try {
+                const res = await fetch(`${apiBase}/api/v1/assets/${f.assetId}/stream`);
+                if (res.ok) {
+                  const blob = await res.blob();
+                  restored[f.index] = { assetId: f.assetId, url: URL.createObjectURL(blob) };
+                } else {
+                  restored[f.index] = { assetId: f.assetId, url: f.assetUrl ?? "" };
+                }
+              } catch {
+                restored[f.index] = { assetId: f.assetId, url: f.assetUrl ?? "" };
+              }
+            })
+          );
           setSlots(restored);
         }
 
@@ -170,10 +272,11 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
           fetchPalettes();
           setStep(1);
         }
-      })
-      .catch(() => {
-        router.replace("/inprogress");
-      });
+      }
+    } catch {
+      router.replace("/inprogress");
+    }
+    })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Navigation ────────────────────────────────────────────────────────────
@@ -230,7 +333,8 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
       await colorworkService.bindFrame(projectId, idx, asset.id);
       setSlots((prev) => {
         const next = [...prev];
-        next[idx] = { assetId: asset.id, url: asset.url };
+        // blob URL 유지 — canvas 렌더링 시 CORS 없이 로딩 가능
+        next[idx] = { ...prev[idx]!, assetId: asset.id };
         return next;
       });
     } catch {
@@ -245,6 +349,7 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   const handleComplete = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
+    setCompleteError(null);
     try {
       try {
         await colorworkService.complete(projectId);
@@ -252,6 +357,17 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
         console.error("complete 저장 실패:", e);
       }
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      const blob = await buildCanvas();
+      if (!blob) {
+        setCompleteError("이미지 생성에 실패했어요. 다시 시도해주세요.");
+        return;
+      }
+      try {
+        await colorworkService.uploadThumbnail(projectId, blob);
+      } catch {
+        setCompleteError("저장에 실패했어요. 다시 시도해주세요.");
+        return;
+      }
       setStep(4);
     } finally {
       setIsSubmitting(false);
@@ -449,6 +565,7 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   if (step === 3) {
     const filledCount = slots.filter(Boolean).length;
     const totalSlots = slots.length;
+    const layoutCfg3 = gridType ? LAYOUT_CONFIG[gridType] : null;
 
     return (
       <div className="flex flex-col h-full bg-white animate-slide-left relative">
@@ -463,7 +580,15 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
             </button>
           </div>
           <span className="font-bold">{filledCount} / {totalSlots} 채움</span>
-          <div className="w-20" />
+          <button
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ["projects"] });
+              setShowSaveComplete(true);
+            }}
+            className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
+          >
+            임시저장
+          </button>
         </div>
         <ColorWorkStep3Body
           slots={slots}
@@ -491,6 +616,43 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
           onFileChange={handleFileChange}
           onComplete={handleComplete}
           onGridSelect={handleGridSelect}
+          extraModals={showSaveComplete ? (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
+              onClick={() => setShowSaveComplete(false)}>
+              <div className="bg-white w-full rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
+                <div className="flex flex-col items-center text-center mb-6">
+                  <div className="w-14 h-14 bg-blue-50 rounded-full flex items-center justify-center mb-4">
+                    <span className="text-2xl">💾</span>
+                  </div>
+                  <h2 className="text-xl font-black text-gray-900">임시저장이 완료되었습니다</h2>
+                  <p className="text-sm text-gray-500 font-medium mt-2 break-keep">저장 내용은 진행중인 활동에서 확인할 수 있습니다.</p>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => router.replace("/")}
+                    className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-2xl text-sm font-bold hover:bg-gray-200 transition-colors">홈으로 이동</button>
+                  <button onClick={() => router.replace("/inprogress")}
+                    className="flex-1 py-3 bg-black text-white rounded-2xl text-sm font-bold hover:bg-gray-800 transition-colors">진행중인 활동</button>
+                </div>
+              </div>
+            </div>
+          ) : completeError ? (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
+              onClick={() => setCompleteError(null)}>
+              <div className="bg-white w-full rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
+                <div className="flex flex-col items-center text-center mb-6">
+                  <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                    <span className="text-2xl">⚠️</span>
+                  </div>
+                  <h2 className="text-lg font-black text-gray-900">완성하기 실패</h2>
+                  <p className="text-sm text-gray-500 font-medium mt-2 break-keep">{completeError}</p>
+                </div>
+                <button onClick={() => setCompleteError(null)}
+                  className="w-full py-3 bg-black text-white rounded-2xl text-sm font-bold">
+                  확인
+                </button>
+              </div>
+            </div>
+          ) : undefined}
         />
       </div>
     );
@@ -502,9 +664,7 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   // ════════════════════════════════════════════════════════════════════════
 
   if (step === 4) {
-    const layoutCfg = gridType ? LAYOUT_CONFIG[gridType] : null;
-
-    const buildCanvas = async (): Promise<Blob | null> => {
+    const buildCanvasUnused = async (): Promise<Blob | null> => {
       const bgHex = frameColorHex;
       const OUTPUT_WIDTH = 1080;
       const PADDING = tc.canvasPad;
@@ -589,13 +749,40 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
       const maxBottom = Math.max(...cells.map((c) => c.y + c.h));
       const outputHeight = maxBottom + PADDING;
 
+      // 서버 이미지를 fetch로 순차 다운로드 → blob URL 변환 → canvas에 그리기
+      const blobUrls: (string | null)[] = [];
+      for (const slot of slots) {
+        if (!slot) { blobUrls.push(null); continue; }
+        if (slot.url?.startsWith("blob:")) {
+          blobUrls.push(slot.url);
+        } else if (slot.assetId) {
+          try {
+            const res = await fetch(`/api/v1/assets/${slot.assetId}/stream`);
+            if (!res.ok) throw new Error(`stream ${res.status}`);
+            const blob = await res.blob();
+            blobUrls.push(URL.createObjectURL(blob));
+          } catch {
+            // stream 실패 시 presigned S3 URL 직접 fetch 시도
+            try {
+              const res = await fetch(slot.url!, { mode: "cors" });
+              if (!res.ok) throw new Error(`s3 ${res.status}`);
+              const blob = await res.blob();
+              blobUrls.push(URL.createObjectURL(blob));
+            } catch {
+              blobUrls.push(null);
+            }
+          }
+        } else {
+          blobUrls.push(null);
+        }
+      }
+
       const images = await Promise.all(
-        slots.map(async (slot) => {
-          if (!slot?.url) return null;
+        blobUrls.map(async (src) => {
+          if (!src) return null;
           try {
             const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.src = slot.url;
+            img.src = src;
             await new Promise<void>((resolve, reject) => {
               img.onload = () => resolve();
               img.onerror = reject;
@@ -607,10 +794,10 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
         })
       );
 
-      const canvas = document.createElement("canvas");
-      canvas.width = OUTPUT_WIDTH;
-      canvas.height = outputHeight;
-      const ctx = canvas.getContext("2d")!;
+      const canvas2 = document.createElement("canvas");
+      canvas2.width = OUTPUT_WIDTH;
+      canvas2.height = outputHeight;
+      const ctx = canvas2.getContext("2d")!;
 
       const CELL_RADIUS = cornerStyle === "rounded" ? 56 : 0;
 
@@ -656,7 +843,7 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
       });
 
 
-      return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      return new Promise((resolve) => canvas2.toBlob(resolve, "image/png"));
     };
 
     const handleDownload = async () => {
@@ -665,12 +852,18 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
       try {
         const blob = await buildCanvas();
         if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `colorwork_${projectId}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
+        const fileName = `colorwork_${projectId}.png`;
+        const file = new File([blob], fileName, { type: "image/png" });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: "컬러워크" });
+        } else {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url; a.download = fileName; a.click();
+          URL.revokeObjectURL(url);
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
       } finally {
         setIsDownloading(false);
       }

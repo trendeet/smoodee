@@ -24,6 +24,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://smoodee-dev.s3.ap-northeast-2.amazonaws.com" />
+        <link rel="dns-prefetch" href="https://smoodee-dev.s3.ap-northeast-2.amazonaws.com" />
+      </head>
       <body className="antialiased" suppressHydrationWarning>
         <Providers>
           <AuthProvider>

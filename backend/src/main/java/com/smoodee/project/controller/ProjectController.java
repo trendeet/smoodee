@@ -4,6 +4,7 @@ import com.smoodee.global.dto.ApiResponse;
 import com.smoodee.global.security.CustomUserDetails;
 import com.smoodee.group.repository.GroupMemberRepository;
 import com.smoodee.group.repository.GroupRepository;
+import com.smoodee.render.repository.RenderJobRepository;
 import com.smoodee.personal.service.ColorworkService;
 import com.smoodee.project.domain.ProjectType;
 import com.smoodee.project.dto.ProjectResponse;
@@ -40,6 +41,7 @@ public class ProjectController {
   private final GroupRepository groupRepository;
   private final GroupMemberRepository groupMemberRepository;
   private final StorageService storageService;
+  private final RenderJobRepository renderJobRepository;
 
   @Operation(
       summary = "프로젝트 목록 조회",
@@ -58,20 +60,10 @@ public class ProjectController {
                   project -> {
                     try {
                       if (project.getTemplateType() == TemplateType.COLORWORK) {
-                        int[] progress = colorworkService.getFrameProgress(project.getId());
                         String thumbnailUrl =
                             colorworkService.getThumbnailUrl(
                                 project.getId(), principal.getUserId());
-                        String paletteColor = colorworkService.getPaletteColor(project.getId());
-                        return ProjectResponse.from(
-                            project,
-                            progress[0],
-                            progress[1],
-                            thumbnailUrl,
-                            paletteColor,
-                            colorworkService.getAllFrameUrls(
-                                project.getId(), principal.getUserId()),
-                            colorworkService.getGridType(project.getId()));
+                        return ProjectResponse.fromWithThumbnail(project, thumbnailUrl);
                       }
                       if (project.getTemplateType() == TemplateType.DAYSHARE) {
                         return groupRepository
@@ -85,12 +77,18 @@ public class ProjectController {
                                           ? storageService.presignGet(
                                               group.getCoverImageS3Key(), Duration.ofDays(7))
                                           : null;
+                                  Long latestRenderJobId =
+                                      renderJobRepository
+                                          .findTopByProjectIdOrderByCreatedAtDesc(project.getId())
+                                          .map(job -> job.getId())
+                                          .orElse(null);
                                   return ProjectResponse.from(
                                       project,
                                       group.getId(),
                                       group.getName(),
                                       memberCount,
-                                      coverUrl);
+                                      coverUrl,
+                                      latestRenderJobId);
                                 })
                             .orElseGet(() -> ProjectResponse.from(project));
                       }
@@ -120,7 +118,8 @@ public class ProjectController {
                           thumbnailUrl,
                           paletteColor,
                           colorworkService.getAllFrameUrls(project.getId(), principal.getUserId()),
-                          colorworkService.getGridType(project.getId()));
+                          colorworkService.getGridType(project.getId()),
+                          colorworkService.getFrameColor(project.getId()));
                     }
                     if (project.getTemplateType() == TemplateType.DAYSHARE) {
                       return groupRepository
@@ -134,8 +133,18 @@ public class ProjectController {
                                         ? storageService.presignGet(
                                             group.getCoverImageS3Key(), Duration.ofDays(7))
                                         : null;
+                                Long latestRenderJobId =
+                                    renderJobRepository
+                                        .findTopByProjectIdOrderByCreatedAtDesc(project.getId())
+                                        .map(job -> job.getId())
+                                        .orElse(null);
                                 return ProjectResponse.from(
-                                    project, group.getId(), group.getName(), memberCount, coverUrl);
+                                    project,
+                                    group.getId(),
+                                    group.getName(),
+                                    memberCount,
+                                    coverUrl,
+                                    latestRenderJobId);
                               })
                           .orElseGet(() -> ProjectResponse.from(project));
                     }
