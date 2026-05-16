@@ -17,6 +17,7 @@ interface Props {
   onDownload: () => void;
   onShare: () => void;
   onHome: () => void;
+  savedNotice?: React.ReactNode;
 }
 
 const ColorWorkStep4Body = ({
@@ -30,6 +31,7 @@ const ColorWorkStep4Body = ({
   onDownload,
   onShare,
   onHome,
+  savedNotice,
 }: Props) => {
   const layoutCfg = gridType ? LAYOUT_CONFIG[gridType] : null;
 
@@ -78,6 +80,9 @@ const ColorWorkStep4Body = ({
         <p className="text-gray-500 text-sm font-medium text-center mt-1">
           #컬러워크 #{selectedApiPalette?.colors[0]?.name ?? "mood"} #{slots.length}cuts
         </p>
+        {savedNotice && (
+          <div className="mt-4">{savedNotice}</div>
+        )}
       </div>
 
       <div className="p-6 pb-safe safe-area-bottom space-y-3 bg-white border-t border-gray-100">

@@ -13,6 +13,8 @@ import {
   Menu,
   Maximize2,
   Square,
+  Library,
+  ArrowRight,
 } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
@@ -66,6 +68,7 @@ const ColorWorkFlow = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isNoticeVisible, setIsNoticeVisible] = useState(false);
   const [frameColor, setFrameColor] = useState<string>("#FFFFFF");
   const [frameThickness, setFrameThickness] = useState<
     "none" | "thin" | "medium"
@@ -511,6 +514,10 @@ const ColorWorkFlow = () => {
     setIsSubmitting(true);
     setCompleteError(null);
     try {
+      if (!isLoggedIn) {
+        setStep(4);
+        return;
+      }
       let pid = projectId;
       if (!pid) {
         pid = await createAndSaveProject(false);
@@ -533,6 +540,8 @@ const ColorWorkFlow = () => {
         return;
       }
       sessionStorage.removeItem("cw_session");
+      setIsNoticeVisible(false);
+      setTimeout(() => setIsNoticeVisible(true), 400);
       setStep(4);
     } finally {
       setIsSubmitting(false);
@@ -1464,6 +1473,12 @@ const ColorWorkFlow = () => {
           onFileChange={handleFileChange}
           onComplete={handleComplete}
           onGridSelect={handleGridSelect}
+          loginNotice={!isLoggedIn && (
+            <p className="text-xs text-gray-400 text-center mt-2">
+              <button onClick={() => router.push("/login")} className="text-blue-400 underline underline-offset-2">로그인</button>
+              {" "}하면 보관함에 자동 저장돼요
+            </p>
+          )}
           extraModals={<>
             {showSaveComplete && (
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
@@ -1589,6 +1604,21 @@ const ColorWorkFlow = () => {
           onDownload={handleDownload}
           onShare={handleShare}
           onHome={() => router.replace("/")}
+          savedNotice={isLoggedIn && (
+            <div className={`flex flex-col items-center gap-3 transition-all duration-700 transform ${isNoticeVisible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"}`}>
+              <span className="text-gray-400 text-xs font-medium animate-pulse">
+                보관함에 저장되었습니다
+              </span>
+              <button
+                onClick={() => router.replace("/recent")}
+                className="group flex items-center justify-center gap-2.5 bg-white border-2 border-black px-7 py-3 rounded-full shadow-[0_10px_20px_-5px_rgba(0,0,0,0.2)] hover:bg-black hover:text-white transition-all active:scale-95"
+              >
+                <Library className="w-4 h-4 text-black group-hover:text-white transition-colors" />
+                <span className="font-extrabold text-sm tracking-tight">보관함 확인하기</span>
+                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-white group-hover:translate-x-1 transition-all" />
+              </button>
+            </div>
+          )}
         />
       </div>
     );

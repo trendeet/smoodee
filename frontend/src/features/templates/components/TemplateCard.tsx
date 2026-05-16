@@ -93,6 +93,18 @@ const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCar
         )}
       </div>
       <div>
+        <div className="flex items-center gap-1.5 mb-1.5">
+          {isColorwork && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+              개인
+            </span>
+          )}
+          {isDayShare && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-600">
+              그룹
+            </span>
+          )}
+        </div>
         <h3 className="font-bold text-sm text-gray-900 leading-tight mb-1">
           {t.title}
         </h3>

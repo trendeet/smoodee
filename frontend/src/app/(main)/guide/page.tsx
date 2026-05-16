@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, HelpCircle, Grid, Info, Users } from "lucide-react";
+import { ChevronLeft, HelpCircle, Grid, User, Users, BookMarked } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
 
@@ -74,20 +74,40 @@ const GuideScreen = () => {
 
           <div className="flex flex-col items-center text-center">
             <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-5 border border-gray-100 shadow-inner relative">
-              <Info size={32} className="text-purple-500" />
-              <div className="absolute -top-1 -left-1 w-8 h-8 bg-purple-500 text-white rounded-full flex items-center justify-center font-black text-sm border-4 border-white shadow-sm">
+              <BookMarked size={32} className="text-green-500" />
+              <div className="absolute -top-1 -left-1 w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center font-black text-sm border-4 border-white shadow-sm">
                 2
               </div>
             </div>
             <h3 className="text-xl font-black mb-2 text-gray-900">
-              맞춤형 사용법 안내
+              추억을 저장해보세요
+            </h3>
+            <p className="text-gray-500 text-sm break-keep leading-relaxed font-medium px-2">
+              <span className="font-black text-gray-700">로그인</span>을 하면{" "}
+              <span className="font-black text-gray-700">보관함</span>,{" "}
+              <span className="font-black text-gray-700">진행중인 활동</span>과 같이
+              <br />
+              추억을 <span className="font-black text-gray-700">저장</span>할 수 있습니다.
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center text-center">
+            <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-5 border border-gray-100 shadow-inner relative">
+              <User size={32} className="text-purple-500" />
+              <div className="absolute -top-1 -left-1 w-8 h-8 bg-purple-500 text-white rounded-full flex items-center justify-center font-black text-sm border-4 border-white shadow-sm">
+                3
+              </div>
+              <div className="absolute -bottom-2 bg-gray-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-md">
+                개인
+              </div>
+            </div>
+            <h3 className="text-xl font-black mb-2 text-gray-900">
+              혼자서도 즐길 수 있어요
             </h3>
             <p className="text-gray-500 text-sm break-keep leading-relaxed font-medium px-4">
-              템플릿을 선택하면
+              '개인' 태그를 갖고 있는 템플릿은
               <br />
-              해당 템플릿을 어떻게 사용하는지
-              <br />
-              상세한 안내를 볼 수 있습니다.
+              혼자서도 즐길 수 있습니다!
             </p>
           </div>
 
@@ -95,17 +115,17 @@ const GuideScreen = () => {
             <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-5 border border-gray-100 shadow-inner relative">
               <Users size={32} className="text-orange-500" />
               <div className="absolute -top-1 -left-1 w-8 h-8 bg-orange-500 text-white rounded-full flex items-center justify-center font-black text-sm border-4 border-white shadow-sm">
-                3
+                4
               </div>
               <div className="absolute -bottom-2 bg-gray-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-md">
-                Group
+                그룹
               </div>
             </div>
             <h3 className="text-xl font-black mb-2 text-gray-900">
               친구들을 초대해보세요
             </h3>
             <p className="text-gray-500 text-sm break-keep leading-relaxed font-medium px-2">
-              'Group' 태그를 갖고 있는 템플릿은
+              '그룹' 태그를 갖고 있는 템플릿은
               <br />
               친구들과 함께 사용할 수 있습니다.
               <br />

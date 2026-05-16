@@ -46,6 +46,7 @@ interface Props {
   onGridSelect: (type: GridLayoutType) => void;
 
   extraModals?: React.ReactNode;
+  loginNotice?: React.ReactNode;
 }
 
 // ─── 공통 탭 컨텐츠 ─────────────────────────────────────────────────────────
@@ -195,7 +196,7 @@ const ColorWorkStep3Body = ({
   setActiveTab, setShowColorPicker, setShowDesignSheet, setFrameModalStep,
   fileInputRef, colorPickerRef,
   onSlotClick, onFileChange, onComplete, onGridSelect,
-  extraModals,
+  extraModals, loginNotice,
 }: Props) => {
   const tc = THICKNESS_CONFIG[frameThickness];
   const frameColorHex = frameColor;
@@ -299,6 +300,7 @@ const ColorWorkStep3Body = ({
         <Button size="lg" disabled={!isComplete || isSubmitting} onClick={onComplete}>
           {isSubmitting ? "렌더링 중..." : "완성하기"}
         </Button>
+        {loginNotice}
       </div>
 
       {/* 프레임 변경 모달 */}

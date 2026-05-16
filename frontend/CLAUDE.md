@@ -30,3 +30,31 @@
 
 - 컴포넌트 테스트: Vitest + Testing Library
 - `npm run test` 로 실행
+
+## 환경변수
+
+- `NEXT_PUBLIC_API_BASE_URL`: 백엔드 API 주소 (빌드 타임 인라인)
+  - 로컬: `.env.local` 에 `http://localhost:8080` (git 미포함)
+  - 프로덕션: Dockerfile ARG 기본값 `https://smoodee.p-e.kr`
+
+## 배포 절차
+
+ECR + Docker Compose 방식. 배포 서버: `ec2-user@smoodee.p-e.kr` (키: `~/.ssh/smoodee`)
+
+```bash
+# 1. ECR 로그인
+aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 759416136224.dkr.ecr.ap-northeast-2.amazonaws.com
+
+# 2. 프론트엔드 빌드 & 푸시 (NEXT_PUBLIC_API_BASE_URL 기본값이 Dockerfile에 있음)
+docker build --platform linux/amd64 -t 759416136224.dkr.ecr.ap-northeast-2.amazonaws.com/smoodee-frontend:latest .
+docker push 759416136224.dkr.ecr.ap-northeast-2.amazonaws.com/smoodee-frontend:latest
+
+# 3. 백엔드 빌드 & 푸시
+cd ../backend
+docker build --platform linux/amd64 -t 759416136224.dkr.ecr.ap-northeast-2.amazonaws.com/smoodee-backend:latest .
+docker push 759416136224.dkr.ecr.ap-northeast-2.amazonaws.com/smoodee-backend:latest
+
+# 4. EC2에서 pull & 재시작
+ssh -i ~/.ssh/smoodee ec2-user@smoodee.p-e.kr \
+  "cd ~ && aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin 759416136224.dkr.ecr.ap-northeast-2.amazonaws.com && docker compose pull && docker compose up -d"
+```

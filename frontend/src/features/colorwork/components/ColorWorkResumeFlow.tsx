@@ -10,6 +10,8 @@ import {
   Download,
   Share2,
   Menu,
+  Library,
+  ArrowRight,
 } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 import Button from "@/components/ui/Button";
@@ -18,6 +20,7 @@ import ColorWorkStep3Body from "./ColorWorkStep3Body";
 import ColorWorkStep4Body from "./ColorWorkStep4Body";
 import { colorworkService } from "@/lib/api/colorworkService";
 import { assetService } from "@/lib/api/assetService";
+import { useAuth } from "@/lib/context/AuthContext";
 
 
 import { useUI } from "@/lib/context/UIContext";
@@ -39,6 +42,8 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { openMenu } = useUI();
+  const { isLoggedIn } = useAuth();
+  const [isNoticeVisible, setIsNoticeVisible] = useState(false);
 
   // ── step: null = loading ──
   const [step, setStep] = useState<1 | 2 | 3 | 4 | null>(null);
@@ -368,6 +373,8 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
         setCompleteError("저장에 실패했어요. 다시 시도해주세요.");
         return;
       }
+      setIsNoticeVisible(false);
+      setTimeout(() => setIsNoticeVisible(true), 400);
       setStep(4);
     } finally {
       setIsSubmitting(false);
@@ -916,6 +923,19 @@ const ColorWorkResumeFlow = ({ projectId, initialStep }: Props) => {
           onDownload={handleDownload}
           onShare={handleShare}
           onHome={() => router.replace("/")}
+          savedNotice={isLoggedIn && (
+            <div className={`flex flex-col items-center gap-3 transition-all duration-700 transform ${isNoticeVisible ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"}`}>
+              <span className="text-gray-400 text-xs font-medium animate-pulse">보관함에 저장되었습니다</span>
+              <button
+                onClick={() => router.replace("/recent")}
+                className="group flex items-center justify-center gap-2.5 bg-white border-2 border-black px-7 py-3 rounded-full shadow-[0_10px_20px_-5px_rgba(0,0,0,0.2)] hover:bg-black hover:text-white transition-all active:scale-95"
+              >
+                <Library className="w-4 h-4 text-black group-hover:text-white transition-colors" />
+                <span className="font-extrabold text-sm tracking-tight">보관함 확인하기</span>
+                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-white group-hover:translate-x-1 transition-all" />
+              </button>
+            </div>
+          )}
         />
       </div>
     );
