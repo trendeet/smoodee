@@ -2,10 +2,9 @@ package com.smoodee.storage.service;
 
 import com.smoodee.global.exception.BusinessException;
 import com.smoodee.global.exception.ErrorCode;
+import jakarta.annotation.PostConstruct;
 import java.io.InputStream;
 import java.time.Duration;
-import java.util.List;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

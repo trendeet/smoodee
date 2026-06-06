@@ -1,6 +1,7 @@
 package com.smoodee.global.security;
 
 import com.smoodee.auth.service.AuthService;
+import com.smoodee.auth.service.OAuthCodeStore;
 import com.smoodee.user.domain.User;
 import com.smoodee.user.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,8 +11,6 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -26,12 +25,16 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
   private final UserService userService;
   private final AuthService authService;
   private final JwtProvider jwtProvider;
+  private final OAuthCodeStore oAuthCodeStore;
 
   @Value("${app.jwt.refresh-token-expiry-ms}")
   private long refreshTokenExpiryMs;
 
   @Value("${app.oauth2.redirect-uri:http://localhost:3000/oauth2/callback}")
   private String frontendRedirectUri;
+
+  @Value("${app.cookie.secure:true}")
+  private boolean cookieSecure;
 
   @Override
   public void onAuthenticationSuccess(
@@ -45,19 +48,10 @@ public class OAuth2SuccessHandler implements AuthenticationSuccessHandler {
     OAuth2UserInfo userInfo = OAuth2UserInfo.of(provider, attributes);
 
     User user = userService.upsertFromOAuth2(userInfo);
-    String refreshToken = authService.createAndSaveRefreshToken(user.getId());
-
-    ResponseCookie refreshCookie =
-        ResponseCookie.from("refreshToken", refreshToken)
-            .httpOnly(true)
-            .secure(true)
-            .sameSite("None")
-            .path("/")
-            .maxAge(refreshTokenExpiryMs / 1000)
-            .build();
-    response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
+    String rawRefreshToken = authService.createAndSaveRefreshToken(user.getId());
+    String code = oAuthCodeStore.createCode(user.getId(), rawRefreshToken);
 
     log.info("OAuth2 login success: userId={}", user.getId());
-    response.sendRedirect(frontendRedirectUri);
+    response.sendRedirect(frontendRedirectUri + "?code=" + code);
   }
 }

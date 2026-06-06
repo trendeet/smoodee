@@ -24,6 +24,7 @@ const images = [
 const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCardProps) => {
   const isColorwork = t.type === "COLORWORK";
   const isDayShare = t.type === "DAYSHARE";
+  const isManitto = t.type === "MANITTO";
 
   return (
     <div
@@ -31,7 +32,7 @@ const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCar
       className="group cursor-pointer space-y-3 active:opacity-80 transition-opacity relative text-left"
     >
       <div
-        className={`aspect-[4/5] ${isColorwork ? "bg-gray-200" : isDayShare ? "bg-gradient-to-br from-blue-400 to-cyan-300" : "bg-gradient-to-br from-gray-400 to-gray-600"} rounded-3xl relative overflow-hidden`}
+        className={`aspect-[4/5] ${isColorwork ? "bg-gray-200" : isDayShare ? "bg-gradient-to-br from-blue-400 to-cyan-300" : isManitto ? "bg-gradient-to-br from-orange-300 to-rose-400" : "bg-gradient-to-br from-gray-400 to-gray-600"} rounded-3xl relative overflow-hidden`}
         style={{ boxShadow: "6px 6px 0 rgba(0,0,0,0.12)", border: "2px solid #333" }}
       >
         {isColorwork ? (
@@ -48,6 +49,20 @@ const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCar
               DAY
               <br />
               SHARE
+            </span>
+            <span className="text-[10px] mt-2 bg-white/20 px-2 py-1 rounded-full backdrop-blur-sm">
+              Group
+            </span>
+          </div>
+        ) : isManitto ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-4 text-center">
+            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center mb-2 text-2xl">
+              👻
+            </div>
+            <span className="font-black text-xl leading-tight">
+              마니또
+              <br />
+              월드
             </span>
             <span className="text-[10px] mt-2 bg-white/20 px-2 py-1 rounded-full backdrop-blur-sm">
               Group
@@ -101,6 +116,11 @@ const TemplateCard = ({ template: t, onClick, isScrapped, onScrap }: TemplateCar
           )}
           {isDayShare && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-600">
+              그룹
+            </span>
+          )}
+          {isManitto && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-500">
               그룹
             </span>
           )}

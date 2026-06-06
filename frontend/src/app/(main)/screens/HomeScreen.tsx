@@ -42,6 +42,13 @@ const FALLBACK_TEMPLATES: TemplateResponse[] = [
     tags: ["그룹"],
     description: "그룹과 함께 하루 기록",
   },
+  {
+    id: 3,
+    type: "MANITTO",
+    title: "마니또 월드",
+    tags: ["그룹"],
+    description: "익명의 비밀 수호천사 게임",
+  },
 ];
 
 const HomeScreen = () => {
@@ -49,12 +56,17 @@ const HomeScreen = () => {
   const { isScrapped, toggle } = useScraps();
   const { data: notifications = [], markRead } = useNotifications();
   const { data: rawTemplates, isLoading: templatesLoading } = useTemplates();
-  const templatesData =
-    rawTemplates && rawTemplates.length > 0
-      ? rawTemplates
-      : !templatesLoading
-      ? FALLBACK_TEMPLATES
-      : [];
+  const templatesData = (() => {
+    const base =
+      rawTemplates && rawTemplates.length > 0
+        ? rawTemplates
+        : !templatesLoading
+        ? FALLBACK_TEMPLATES
+        : [];
+    // Always include MANITTO if not already present from server
+    const hasManitto = base.some((t) => t.type === "MANITTO");
+    return hasManitto ? base : [...base, FALLBACK_TEMPLATES.find((t) => t.type === "MANITTO")!];
+  })();
   const { openMenu } = useUI();
   const { isLoggedIn } = useAuth();
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
@@ -114,7 +126,7 @@ const HomeScreen = () => {
   return (
     <div className="flex flex-col h-full bg-white pb-safe overflow-y-auto no-scrollbar relative">
       <StatusBar theme="dark" />
-      <div className="px-4 pb-2 sticky top-0 bg-white/95 backdrop-blur-md z-10 border-b border-gray-100/50">
+      <div className="px-4 pb-2 sticky top-0 bg-white/95 backdrop-blur-md z-30 border-b border-gray-100/50">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <button
@@ -205,7 +217,7 @@ const HomeScreen = () => {
                     : filter === "개인"
                     ? tags.includes("개인") || t.type === "COLORWORK"
                     : filter === "그룹"
-                    ? tags.includes("그룹") || t.type === "DAYSHARE"
+                    ? tags.includes("그룹") || t.type === "DAYSHARE" || t.type === "MANITTO"
                     : tags.includes(filter);
 
                 const q = searchText.toLowerCase();
@@ -234,6 +246,7 @@ const HomeScreen = () => {
                   onClick={() => {
                     if (t.type === "COLORWORK") router.push("/colorwork");
                     else if (t.type === "DAYSHARE") setShowDayShareSheet(true);
+                    else if (t.type === "MANITTO") router.push("/manitto");
                     else router.push("/");
                   }}
                   isScrapped={isScrapped(t.type)}

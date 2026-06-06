@@ -7,6 +7,7 @@ import { tokenStore } from "@/lib/api/tokenStore";
 import { UserProfileResponse } from "@/lib/api/types";
 
 const AVATAR_KEY = "smoodee_profile_avatar";
+const SESSION_KEY = "smoodee_has_session";
 
 interface UserProfile {
   id?: number;
@@ -18,6 +19,7 @@ interface UserProfile {
 
 interface AuthContextType {
   isLoggedIn: boolean;
+  isInitializing: boolean;
   userProfile: UserProfile | null;
   accessToken: string | null;
   login: (token: string) => Promise<void>;
@@ -41,10 +43,15 @@ function toUserProfile(res: UserProfileResponse): UserProfile {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
-  // 앱 시작 시 refreshToken 쿠키로 accessToken 복원
+  // 앱 시작 시 refreshToken 쿠키로 accessToken 복원 (이전 세션 힌트가 있을 때만)
   useEffect(() => {
+    if (!localStorage.getItem(SESSION_KEY)) {
+      setIsInitializing(false);
+      return;
+    }
     authService
       .refresh()
       .then(({ accessToken: token }) => {
@@ -55,14 +62,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       })
       .then((res) => setUserProfile(toUserProfile(res)))
       .catch(() => {
-        // refreshToken 없거나 만료 → 비로그인 상태 유지
+        localStorage.removeItem(SESSION_KEY);
         tokenStore.set(null);
         setAccessToken(null);
         setIsLoggedIn(false);
-      });
+      })
+      .finally(() => setIsInitializing(false));
   }, []);
 
   const login = async (token: string) => {
+    localStorage.setItem(SESSION_KEY, "1");
     tokenStore.set(token);
     setAccessToken(token);
     setIsLoggedIn(true);
@@ -80,6 +89,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       // ignore
     } finally {
+      localStorage.removeItem(SESSION_KEY);
       tokenStore.set(null);
       setAccessToken(null);
       setIsLoggedIn(false);
@@ -100,7 +110,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return (
     <AuthContext.Provider
-      value={{ isLoggedIn, userProfile, accessToken, login, logout, updateProfile }}
+      value={{ isLoggedIn, isInitializing, userProfile, accessToken, login, logout, updateProfile }}
     >
       {children}
     </AuthContext.Provider>

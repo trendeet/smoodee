@@ -41,10 +41,21 @@ public class OAuth2UserInfo {
         "kakao", String.valueOf(attributes.get("id")), email, nickname, picture);
   }
 
+  @SuppressWarnings("unchecked")
+  public static OAuth2UserInfo ofNaver(Map<String, Object> attributes) {
+    Map<String, Object> response = (Map<String, Object>) attributes.get("response");
+    if (response == null) response = Map.of();
+    String email = (String) response.get("email");
+    String name = (String) response.getOrDefault("name", "네이버유저");
+    String picture = (String) response.get("profile_image");
+    return new OAuth2UserInfo("naver", (String) response.get("id"), email, name, picture);
+  }
+
   public static OAuth2UserInfo of(String provider, Map<String, Object> attributes) {
     return switch (provider.toLowerCase()) {
       case "google" -> ofGoogle(attributes);
       case "kakao" -> ofKakao(attributes);
+      case "naver" -> ofNaver(attributes);
       default -> throw new IllegalArgumentException("Unsupported provider: " + provider);
     };
   }

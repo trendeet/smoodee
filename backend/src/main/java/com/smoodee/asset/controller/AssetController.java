@@ -61,11 +61,12 @@ public class AssetController {
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long assetId) {
     Long userId = principal != null ? principal.getUserId() : null;
     Asset asset = assetService.getAssetWithAccessCheck(assetId, userId);
-    StreamingResponseBody body = out -> {
-      try (InputStream in = storageService.getObject(asset.getS3Key())) {
-        in.transferTo(out);
-      }
-    };
+    StreamingResponseBody body =
+        out -> {
+          try (InputStream in = storageService.getObject(asset.getS3Key())) {
+            in.transferTo(out);
+          }
+        };
     return ResponseEntity.ok()
         .header(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_JPEG_VALUE)
         .header(HttpHeaders.CACHE_CONTROL, "public, max-age=3600")

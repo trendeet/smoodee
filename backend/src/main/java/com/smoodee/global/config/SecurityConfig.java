@@ -60,6 +60,7 @@ public class SecurityConfig {
                         "/oauth2/**",
                         "/login/**",
                         "/api/v1/auth/refresh",
+                        "/api/v1/auth/exchange",
                         "/api/v1/templates/**",
                         "/actuator/health",
                         "/api/v1/personal/colorwork/**",
@@ -69,6 +70,12 @@ public class SecurityConfig {
                         "/api/v1/assets/*/stream")
                     .permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/v1/templates/**")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/manitto/rooms/*")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/manitto/rooms/*/events")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/manitto/rooms/*/visits")
                     .permitAll()
                     .anyRequest()
                     .authenticated())
@@ -93,8 +100,14 @@ public class SecurityConfig {
                     .successHandler(oAuth2SuccessHandler)
                     .failureHandler(
                         (request, response, exception) -> {
-                          log.error("OAuth2 login failed: {}", exception.getMessage(), exception);
-                          response.sendRedirect(getFrontendLoginUri() + "?error=oauth2");
+                          log.error("OAuth2 login failed: {} | cause: {}",
+                              exception.getMessage(),
+                              exception.getCause() != null ? exception.getCause().getMessage() : "none",
+                              exception);
+                          String msg = java.net.URLEncoder.encode(
+                              exception.getMessage() != null ? exception.getMessage() : "unknown",
+                              java.nio.charset.StandardCharsets.UTF_8);
+                          response.sendRedirect(getFrontendLoginUri() + "?error=oauth2&reason=" + msg);
                         }))
         .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
     return http.build();

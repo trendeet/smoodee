@@ -1,12 +1,21 @@
 "use client";
 
-import React from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import StatusBar from "@/components/ui/StatusBar";
 
 const LoginScreen = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const error = searchParams.get("error");
+    const reason = searchParams.get("reason");
+    if (error) {
+      console.error("[OAuth2] 로그인 실패 — error:", error, "| reason:", reason ?? "(백엔드 터미널 로그 확인)");
+    }
+  }, [searchParams]);
 
   const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
@@ -53,15 +62,15 @@ const LoginScreen = () => {
           카카오로 로그인
         </button>
 
-        {/* Naver — 준비 중 */}
+        {/* Naver */}
         <button
-          disabled
-          className="w-full relative flex items-center justify-center bg-[#03C75A]/30 text-white/50 rounded-2xl py-4 text-sm font-bold cursor-not-allowed"
+          onClick={() => { window.location.href = `${base}/oauth2/authorization/naver`; }}
+          className="w-full relative flex items-center justify-center bg-[#03C75A] text-white rounded-2xl py-4 text-sm font-bold transition-transform active:scale-[0.98] shadow-sm"
         >
-          <div className="absolute left-5 w-6 h-6 flex items-center justify-center text-xl font-black leading-none pb-0.5 opacity-40">
+          <div className="absolute left-5 w-6 h-6 flex items-center justify-center text-xl font-black leading-none pb-0.5">
             N
           </div>
-          네이버로 로그인 (준비 중)
+          네이버로 로그인
         </button>
 
         {/* Google — 실제 OAuth2 */}
