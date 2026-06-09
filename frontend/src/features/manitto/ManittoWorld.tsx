@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Bell,
-  User,
+  Newspaper,
   Ghost,
   Home,
   Smile,
@@ -19,6 +19,8 @@ import SetupView from "./views/SetupView";
 import LobbyView from "./views/LobbyView";
 import RoomView from "./views/RoomView";
 import ResultView from "./views/ResultView";
+import FeedView from "./views/FeedView";
+import CertApprovalModal from "./components/CertApprovalModal";
 import { manittoService } from "./lib/manittoService";
 import {
   ManittoRoomResponse,
@@ -29,10 +31,12 @@ import {
   ManittoVisitResponse,
   ManittoParticipantInfo,
   DropItemRequest,
+  ManittoCertPostResponse,
+  CertPendingPayload,
 } from "./types";
 import { PALETTE, MISSIONS, MissionId } from "./constants/gameConfig";
 
-type View = "setup" | "lobby" | "room" | "result" | "loading" | "create";
+type View = "setup" | "lobby" | "room" | "result" | "feed" | "loading" | "create";
 
 interface RoomState {
   [userId: number]: ManittoItemResponse[];
@@ -68,11 +72,10 @@ const ManittoWorld = () => {
     ManittoNotificationResponse[]
   >([]);
   const [visits, setVisits] = useState<ManittoVisitResponse[]>([]);
+  const [certPosts, setCertPosts] = useState<ManittoCertPostResponse[]>([]);
+  const [pendingCertQueue, setPendingCertQueue] = useState<CertPendingPayload[]>([]);
   const [completedMissions, setCompletedMissions] = useState<Set<MissionId>>(new Set());
   const [justCompletedMission, setJustCompletedMission] = useState<MissionId | null>(null);
-  const [myCharPos, setMyCharPos] = useState<{ x: number; y: number } | null>(null);
-  const [remoteCharPos, setRemoteCharPos] = useState<{ x: number; y: number } | null>(null);
-
   const myUserId = userProfile?.id ?? 0;
 
   // localStorage key는 방+유저 단위로 분리
@@ -95,10 +98,10 @@ const ManittoWorld = () => {
       if (missionStorageKey) {
         try { localStorage.setItem(missionStorageKey, JSON.stringify([...next])); } catch { /* ignore */ }
       }
+      setJustCompletedMission(id);
+      setTimeout(() => setJustCompletedMission(null), 2200);
       return next;
     });
-    setJustCompletedMission(id);
-    setTimeout(() => setJustCompletedMission(null), 2200);
   }, [missionStorageKey]);
 
   const loadRoom = useCallback(async (code: string, targetUserId?: number) => {
@@ -127,6 +130,12 @@ const ManittoWorld = () => {
     } catch {
       /* ignore */
     }
+    manittoService.getCertPosts(code).then(setCertPosts).catch(() => {});
+    manittoService.getPendingCerts(code).then((pending) => {
+      if (pending.length > 0) {
+        setPendingCertQueue(pending.map((p) => ({ postId: p.postId, imageUrl: p.imageUrl, targetUserId: myUserId })));
+      }
+    }).catch(() => {});
     if (targetUserId) {
       setActiveRoomUserId(targetUserId);
       setView("room");
@@ -134,6 +143,15 @@ const ManittoWorld = () => {
       setView("lobby");
     }
   };
+
+  const pendingVisitRef = useRef<{ targetUserId: number; posX: number; posY: number } | null>(null);
+
+  const recordPendingVisit = useCallback(() => {
+    if (pendingVisitRef.current) {
+      manittoService.recordVisit(roomCode, pendingVisitRef.current).catch(() => {});
+      pendingVisitRef.current = null;
+    }
+  }, [roomCode]);
 
   // 방 뷰에서 벗어날 때 presence 해제 (StrictMode 이중 실행 안전)
   const wasInRoomRef = useRef(false);
@@ -202,10 +220,31 @@ const ManittoWorld = () => {
         /* ignore */
       }
     });
-    es.addEventListener("character-moved", (e) => {
+    es.addEventListener("nickname-updated", (e) => {
       try {
-        const { userId, x, y } = JSON.parse(e.data);
-        if (userId !== myUserId) setRemoteCharPos({ x, y });
+        const { userId, nickname } = JSON.parse(e.data);
+        setRoomData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            participants: prev.participants.map((p) =>
+              p.userId === userId ? { ...p, nickname } : p
+            ),
+          };
+        });
+      } catch { /* ignore */ }
+    });
+    es.addEventListener("cert-pending", (e) => {
+      try {
+        const payload: CertPendingPayload = JSON.parse(e.data);
+        if (payload.targetUserId !== myUserId) return;
+        setPendingCertQueue((prev) => [...prev, payload]);
+      } catch { /* ignore */ }
+    });
+    es.addEventListener("cert-approved", (e) => {
+      try {
+        const post: ManittoCertPostResponse = JSON.parse(e.data);
+        setCertPosts((prev) => [post, ...prev]);
       } catch { /* ignore */ }
     });
     es.addEventListener("item-dropped", (e) => {
@@ -311,36 +350,30 @@ const ManittoWorld = () => {
   };
 
   const goToRoom = async (userId: number) => {
+    // 다른 사람 방에서 나갈 때 발자국 기록
+    recordPendingVisit();
     setActiveRoomUserId(userId);
     setView("room");
     router.replace(`/manitto?code=${roomCode}&room=${userId}`, {
       scroll: false,
     });
-    // 캐릭터 초기 위치 설정
-    const sw = typeof window !== "undefined" ? window.innerWidth : 390;
-    const floorH = Math.max(200, (typeof window !== "undefined" ? window.innerHeight : 700) - 60 - 130);
-    const isOwn = userId === myUserId;
-    setMyCharPos({ x: isOwn ? sw / 2 : sw / 2 + 110, y: 130 + floorH * 0.67 });
-    setRemoteCharPos(null);
     // 마니띠 방 방문 미션 자동 달성
     if (userId === lobbyData?.myTargetUserId) completeMission("visit");
     // presence 등록
     manittoService.enterPresence(roomCode).catch(() => {});
-    // 내 방이 아닐 때: 방문 기록 + 발자국 위치 전송
+    // 내 방이 아닐 때: 나갈 때 발자국 남길 위치 미리 계산해 저장
     if (userId !== myUserId) {
-      // 방문자 캐릭터 위치 기반 발자국 (center+110px, floor 67%)
       const sw = typeof window !== "undefined" ? window.innerWidth : 390;
       const sh = typeof window !== "undefined" ? window.innerHeight : 700;
-      const floorH = Math.max(200, sh - 60 - 130); // header≈60, wall=130
+      const floorH = Math.max(200, sh - 60 - 130);
       const jx = Math.floor(Math.random() * 40 - 20);
       const jy = Math.floor(Math.random() * 30 - 15);
       const posX = Math.round(sw / 2 + 110 + jx);
       const posY = Math.round(130 + floorH * 0.67 + jy);
-      manittoService
-        .recordVisit(roomCode, { targetUserId: userId, posX, posY })
-        .catch(() => {});
+      pendingVisitRef.current = { targetUserId: userId, posX, posY };
     } else {
-      // 내 방: 발자국 목록 로드
+      // 내 방: 발자국 없음, 목록 로드
+      pendingVisitRef.current = null;
       manittoService
         .getVisits(roomCode)
         .then(setVisits)
@@ -352,11 +385,6 @@ const ManittoWorld = () => {
         setRoomObjects((prev) => ({ ...prev, [userId]: items }));
       }).catch(() => {});
     }
-  };
-
-  const handleMove = (x: number, y: number) => {
-    setMyCharPos({ x, y });
-    manittoService.move(roomCode, x, y).catch(() => {});
   };
 
   const handleStoreInLocker = async (itemId: number) => {
@@ -375,10 +403,11 @@ const ManittoWorld = () => {
   };
 
   const handleDropItem = async (
-    data: Omit<DropItemRequest, "targetUserId">
+    data: Omit<DropItemRequest, "targetUserId"> & { imageFile?: File; wantToShare?: boolean }
   ) => {
     if (!activeRoomUserId || !lobbyData) return;
-    const req: DropItemRequest = { ...data, targetUserId: activeRoomUserId };
+    const { imageFile, wantToShare, ...itemData } = data;
+    const req: DropItemRequest = { ...itemData, targetUserId: activeRoomUserId };
     try {
       const newItem = await manittoService.dropItem(roomCode, req);
       setRoomObjects((prev) => ({
@@ -386,6 +415,9 @@ const ManittoWorld = () => {
         [activeRoomUserId]: [...(prev[activeRoomUserId] ?? []), newItem],
       }));
       completeMission("drop");
+      if (imageFile && wantToShare) {
+        manittoService.certifyItem(roomCode, newItem.id, imageFile).catch(() => {});
+      }
     } catch {
       // optimistic update failed silently
     }
@@ -425,6 +457,32 @@ const ManittoWorld = () => {
       setView("result");
     } catch {
       setErrorMsg("결과를 불러오는데 실패했습니다.");
+    }
+  };
+
+  const handleLike = async (postId: number) => {
+    // Optimistic update
+    setCertPosts((prev) =>
+      prev.map((p) =>
+        p.id === postId
+          ? { ...p, liked: !p.liked, likeCount: p.liked ? p.likeCount - 1 : p.likeCount + 1 }
+          : p
+      )
+    );
+    try {
+      const result = await manittoService.toggleLike(roomCode, postId);
+      setCertPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, likeCount: result.likeCount, liked: result.liked } : p))
+      );
+    } catch {
+      // Revert on error
+      setCertPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, liked: !p.liked, likeCount: p.liked ? p.likeCount - 1 : p.likeCount + 1 }
+            : p
+        )
+      );
     }
   };
 
@@ -498,8 +556,11 @@ const ManittoWorld = () => {
           <button
             onClick={() => {
               if (view === "room") {
+                recordPendingVisit();
                 setView("lobby");
                 router.replace(`/manitto?code=${roomCode}`, { scroll: false });
+              } else if (view === "feed") {
+                setView("lobby");
               } else {
                 router.back();
               }
@@ -516,14 +577,9 @@ const ManittoWorld = () => {
           </h1>
         </div>
         {view !== "setup" && view !== "result" && (
-          <div className="flex gap-2">
-            <button className="p-1 border-2 border-black bg-white shadow-[2px_2px_0px_0px_black] active:shadow-none text-black">
-              <Bell size={20} />
-            </button>
-            <button className="p-1 border-2 border-black bg-white shadow-[2px_2px_0px_0px_black] active:shadow-none text-black">
-              <User size={20} />
-            </button>
-          </div>
+          <button className="p-1 border-2 border-black bg-white shadow-[2px_2px_0px_0px_black] active:shadow-none text-black">
+            <Bell size={20} />
+          </button>
         )}
       </header>
 
@@ -563,8 +619,10 @@ const ManittoWorld = () => {
             myUserId={myUserId}
             notifications={notifications}
             completedMissions={completedMissions}
+            certPostCount={certPosts.length}
             onJoinRoom={goToRoom}
             onShowResult={handleShowResult}
+            onViewFeed={() => { recordPendingVisit(); setView("feed"); }}
           />
         )}
 
@@ -585,16 +643,14 @@ const ManittoWorld = () => {
             canInteract={canInteractWithRoom}
             otherUserPresent={otherUserPresent}
             remoteGreetingBubble={remoteGreetingBubble}
-            myCharPos={myCharPos}
-            remoteCharPos={remoteCharPos}
             onBack={() => {
+              recordPendingVisit();
               setView("lobby");
               router.replace(`/manitto?code=${roomCode}`, { scroll: false });
             }}
             onDrop={handleDropItem}
             onOpenObject={handleOpenObject}
             onStoreInLocker={handleStoreInLocker}
-            onMove={handleMove}
             onSendGreet={(text) => {
               manittoService.sendGreet(roomCode, text).catch(() => {});
               completeMission("greet");
@@ -609,10 +665,15 @@ const ManittoWorld = () => {
             onViewAllResults={() => router.push(`/manitto/result?code=${roomCode}`)}
           />
         )}
+
+        {view === "feed" && (
+          <FeedView posts={certPosts} onLike={handleLike} />
+        )}
+
       </main>
 
       {view !== "setup" && view !== "result" && (
-        <div className="absolute bottom-6 right-6 z-[60] flex flex-col gap-3 items-end pointer-events-none">
+        <div className="absolute bottom-4 right-4 z-[60] flex flex-col gap-2 items-end pointer-events-none">
           <div className="pointer-events-auto flex flex-col gap-3 items-end">
             <HUDButton
               active={view === "room" && isMineRoom}
@@ -630,7 +691,7 @@ const ManittoWorld = () => {
             />
             <HUDButton
               active={view === "lobby"}
-              onClick={() => setView("lobby")}
+              onClick={() => { recordPendingVisit(); setView("lobby"); }}
               color={PALETTE.darkNavy}
               icon={<Home />}
               label="로비로"
@@ -646,6 +707,21 @@ const ManittoWorld = () => {
           isSolved={isDeductionSolved}
           onClose={() => setShowDeductionModal(false)}
           onSubmit={handleDeductionSubmit}
+        />
+      )}
+
+      {pendingCertQueue.length > 0 && (
+        <CertApprovalModal
+          imageUrl={pendingCertQueue[0].imageUrl}
+          onApprove={(comment) => {
+            manittoService.approveCert(roomCode, pendingCertQueue[0].postId, comment).catch(() => {});
+            setPendingCertQueue((prev) => prev.slice(1));
+          }}
+          onReject={() => {
+            manittoService.rejectCert(roomCode, pendingCertQueue[0].postId).catch(() => {});
+            setPendingCertQueue((prev) => prev.slice(1));
+          }}
+          onClose={() => setPendingCertQueue((prev) => prev.slice(1))}
         />
       )}
     </div>

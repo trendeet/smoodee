@@ -106,3 +106,19 @@ export interface RecordVisitRequest {
   posX: number;
   posY: number;
 }
+
+export interface ManittoCertPostResponse {
+  id: number;
+  manittiName: string;
+  imageUrl: string;
+  comment: string | null;
+  createdAt: string;
+  likeCount: number;
+  liked: boolean;
+}
+
+export interface CertPendingPayload {
+  postId: number;
+  imageUrl: string;
+  targetUserId: number;
+}

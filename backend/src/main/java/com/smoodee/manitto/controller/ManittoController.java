@@ -2,9 +2,13 @@ package com.smoodee.manitto.controller;
 
 import com.smoodee.global.dto.ApiResponse;
 import com.smoodee.global.security.CustomUserDetails;
+import com.smoodee.manitto.dto.ApproveCertRequest;
 import com.smoodee.manitto.dto.CreateRoomRequest;
 import com.smoodee.manitto.dto.DropItemRequest;
 import com.smoodee.manitto.dto.JoinRoomRequest;
+import com.smoodee.manitto.dto.LikeResponse;
+import com.smoodee.manitto.dto.ManittoCertPostResponse;
+import com.smoodee.manitto.dto.PendingCertResponse;
 import com.smoodee.manitto.dto.ManittoItemResponse;
 import com.smoodee.manitto.dto.ManittoLobbyResponse;
 import com.smoodee.manitto.dto.MoveRequest;
@@ -35,7 +39,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @Tag(name = "Manitto", description = "마니또 월드 API")
@@ -254,5 +260,69 @@ public class ManittoController {
       @AuthenticationPrincipal CustomUserDetails principal, @PathVariable String roomCode) {
     return ResponseEntity.ok(
         ApiResponse.of(manittoService.getNotifications(roomCode, principal.getUserId())));
+  }
+
+  @Operation(summary = "인증 이미지 업로드 (자랑해줘)")
+  @PostMapping(value = "/{roomCode}/items/{itemId}/certify", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<Void> certifyItem(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable String roomCode,
+      @PathVariable Long itemId,
+      @RequestParam("image") MultipartFile image) throws Exception {
+    manittoService.certifyItem(
+        roomCode,
+        principal.getUserId(),
+        itemId,
+        image.getInputStream(),
+        image.getContentType(),
+        image.getSize());
+    return ResponseEntity.noContent().build();
+  }
+
+  @Operation(summary = "인증 포스트 승인")
+  @PostMapping("/{roomCode}/cert-posts/{postId}/approve")
+  public ResponseEntity<Void> approveCert(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable String roomCode,
+      @PathVariable Long postId,
+      @RequestBody ApproveCertRequest request) {
+    manittoService.approveCert(roomCode, principal.getUserId(), postId, request);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Operation(summary = "인증 포스트 거절")
+  @PostMapping("/{roomCode}/cert-posts/{postId}/reject")
+  public ResponseEntity<Void> rejectCert(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable String roomCode,
+      @PathVariable Long postId) {
+    manittoService.rejectCert(roomCode, principal.getUserId(), postId);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Operation(summary = "인증 피드 조회")
+  @GetMapping("/{roomCode}/cert-posts")
+  public ResponseEntity<ApiResponse<List<ManittoCertPostResponse>>> getCertPosts(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable String roomCode) {
+    return ResponseEntity.ok(ApiResponse.of(manittoService.getCertPosts(roomCode, principal.getUserId())));
+  }
+
+  @Operation(summary = "인증 포스트 좋아요 토글")
+  @PostMapping("/{roomCode}/cert-posts/{postId}/like")
+  public ResponseEntity<ApiResponse<LikeResponse>> toggleLike(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable String roomCode,
+      @PathVariable Long postId) {
+    return ResponseEntity.ok(ApiResponse.of(manittoService.toggleLike(roomCode, principal.getUserId(), postId)));
+  }
+
+  @Operation(summary = "내 미승인 인증 요청 조회")
+  @GetMapping("/{roomCode}/cert-posts/pending")
+  public ResponseEntity<ApiResponse<List<PendingCertResponse>>> getPendingCerts(
+      @AuthenticationPrincipal CustomUserDetails principal,
+      @PathVariable String roomCode) {
+    return ResponseEntity.ok(
+        ApiResponse.of(manittoService.getPendingCerts(roomCode, principal.getUserId())));
   }
 }

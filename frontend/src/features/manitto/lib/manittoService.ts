@@ -2,6 +2,7 @@ import apiClient from "@/lib/api/apiClient";
 import {
   CreateRoomRequest,
   DropItemRequest,
+  ManittoCertPostResponse,
   ManittoItemResponse,
   ManittoLobbyResponse,
   ManittoNotificationResponse,
@@ -111,5 +112,36 @@ export const manittoService = {
 
   move: async (roomCode: string, x: number, y: number): Promise<void> => {
     await apiClient.post(`${BASE}/${roomCode}/move`, { x, y });
+  },
+
+  certifyItem: async (roomCode: string, itemId: number, file: File): Promise<void> => {
+    const form = new FormData();
+    form.append("image", file);
+    await apiClient.post(`${BASE}/${roomCode}/items/${itemId}/certify`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  approveCert: async (roomCode: string, postId: number, comment: string): Promise<void> => {
+    await apiClient.post(`${BASE}/${roomCode}/cert-posts/${postId}/approve`, { comment });
+  },
+
+  rejectCert: async (roomCode: string, postId: number): Promise<void> => {
+    await apiClient.post(`${BASE}/${roomCode}/cert-posts/${postId}/reject`);
+  },
+
+  getCertPosts: async (roomCode: string): Promise<ManittoCertPostResponse[]> => {
+    const { data } = await apiClient.get(`${BASE}/${roomCode}/cert-posts`);
+    return data.data;
+  },
+
+  toggleLike: async (roomCode: string, postId: number): Promise<{ likeCount: number; liked: boolean }> => {
+    const { data } = await apiClient.post(`${BASE}/${roomCode}/cert-posts/${postId}/like`);
+    return data.data;
+  },
+
+  getPendingCerts: async (roomCode: string): Promise<Array<{ postId: number; imageUrl: string }>> => {
+    const { data } = await apiClient.get(`${BASE}/${roomCode}/cert-posts/pending`);
+    return data.data;
   },
 };

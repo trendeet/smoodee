@@ -24,11 +24,24 @@ import com.smoodee.manitto.dto.ManittoRoomResponse;
 import com.smoodee.manitto.dto.ManittoVisitResponse;
 import com.smoodee.manitto.dto.RecordVisitRequest;
 import com.smoodee.manitto.dto.SubmitDeductionRequest;
+import com.smoodee.manitto.domain.CertPostStatus;
+import com.smoodee.manitto.domain.ManittoCertPost;
+import com.smoodee.manitto.dto.ApproveCertRequest;
+import com.smoodee.manitto.dto.ManittoCertPostResponse;
+import com.smoodee.manitto.dto.PendingCertResponse;
+import com.smoodee.manitto.domain.ManittoCertLike;
+import com.smoodee.manitto.dto.LikeResponse;
+import com.smoodee.manitto.repository.ManittoCertLikeRepository;
+import com.smoodee.manitto.repository.ManittoCertPostRepository;
 import com.smoodee.manitto.repository.ManittoDeductionRepository;
 import com.smoodee.manitto.repository.ManittoItemRepository;
 import com.smoodee.manitto.repository.ManittoParticipantRepository;
 import com.smoodee.manitto.repository.ManittoRoomRepository;
 import com.smoodee.manitto.repository.ManittoVisitRepository;
+import com.smoodee.storage.service.StorageService;
+import java.io.InputStream;
+import java.time.Duration;
+import java.util.UUID;
 import com.smoodee.user.domain.User;
 import com.smoodee.user.repository.UserRepository;
 import java.time.Duration;
@@ -37,6 +50,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Collectors;
@@ -66,8 +80,11 @@ public class ManittoService {
   private final ManittoItemRepository itemRepository;
   private final ManittoDeductionRepository deductionRepository;
   private final ManittoVisitRepository visitRepository;
+  private final ManittoCertPostRepository certPostRepository;
+  private final ManittoCertLikeRepository certLikeRepository;
   private final UserRepository userRepository;
   private final ManittoSseService sseService;
+  private final StorageService storageService;
 
   public ManittoRoomResponse createRoom(Long userId, CreateRoomRequest req) {
     User user =
@@ -510,7 +527,8 @@ public class ManittoService {
         new TransactionSynchronization() {
           @Override
           public void afterCommit() {
-            sseService.notifyRoomChanged(roomCode);
+            sseService.sendEvent(roomCode, "nickname-updated",
+                Map.of("userId", userId, "nickname", nickname));
           }
         });
   }
@@ -636,6 +654,153 @@ public class ManittoService {
     long hours = minutes / 60;
     if (hours < 24) return hours + "시간 전";
     return (hours / 24) + "일 전";
+  }
+
+  public ManittoCertPost certifyItem(
+      String roomCode, Long fromUserId, Long itemId, InputStream imageStream,
+      String contentType, long contentLength) {
+    ManittoRoom room = roomRepository.findByRoomCode(roomCode)
+        .orElseThrow(() -> new NotFoundException(ErrorCode.RESOURCE_NOT_FOUND));
+    ManittoItem item = itemRepository.findById(itemId)
+        .orElseThrow(() -> new NotFoundException(ErrorCode.RESOURCE_NOT_FOUND));
+    if (!item.getFromUserId().equals(fromUserId)) {
+      throw new ForbiddenException(ErrorCode.FORBIDDEN);
+    }
+    String key = "manitto/" + roomCode + "/cert/" + UUID.randomUUID() + "." +
+        (contentType.contains("png") ? "png" : "jpg");
+    storageService.put(imageStream, key, contentType, contentLength);
+    ManittoCertPost post = ManittoCertPost.builder()
+        .roomId(room.getId())
+        .itemId(itemId)
+        .fromUserId(fromUserId)
+        .targetUserId(item.getOwnerUserId())
+        .imageKey(key)
+        .build();
+    certPostRepository.save(post);
+    String imageUrl = storageService.presignGet(key, Duration.ofHours(1));
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+      @Override
+      public void afterCommit() {
+        sseService.sendEvent(roomCode, "cert-pending", Map.of(
+            "postId", post.getId(),
+            "imageUrl", imageUrl,
+            "targetUserId", item.getOwnerUserId()
+        ));
+      }
+    });
+    return post;
+  }
+
+  public void approveCert(String roomCode, Long userId, Long postId, ApproveCertRequest req) {
+    ManittoCertPost post = certPostRepository.findById(postId)
+        .orElseThrow(() -> new NotFoundException(ErrorCode.RESOURCE_NOT_FOUND));
+    if (!post.getTargetUserId().equals(userId)) {
+      throw new ForbiddenException(ErrorCode.FORBIDDEN);
+    }
+    post.approve(req.getComment());
+    String manittiName = participantRepository
+        .findByRoomIdAndUserId(post.getRoomId(), userId)
+        .map(p -> p.getNickname() != null ? p.getNickname() : "")
+        .orElse("");
+    if (manittiName.isBlank()) {
+      manittiName = userRepository.findById(userId)
+          .map(u -> u.getName()).orElse("마니띠");
+    }
+    String imageUrl = storageService.presignGet(post.getImageKey(), Duration.ofHours(1));
+    final String finalManittiName = manittiName;
+    final String timeAgo = formatTimeAgo(post.getCreatedAt());
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+      @Override
+      public void afterCommit() {
+        sseService.sendEvent(roomCode, "cert-approved", Map.of(
+            "id", post.getId(),
+            "manittiName", finalManittiName,
+            "imageUrl", imageUrl,
+            "comment", req.getComment() != null ? req.getComment() : "",
+            "createdAt", timeAgo,
+            "likeCount", 0,
+            "liked", false
+        ));
+      }
+    });
+  }
+
+  public void rejectCert(String roomCode, Long userId, Long postId) {
+    ManittoCertPost post = certPostRepository.findById(postId)
+        .orElseThrow(() -> new NotFoundException(ErrorCode.RESOURCE_NOT_FOUND));
+    if (!post.getTargetUserId().equals(userId)) {
+      throw new ForbiddenException(ErrorCode.FORBIDDEN);
+    }
+    post.reject();
+  }
+
+  @Transactional(readOnly = true)
+  public List<ManittoCertPostResponse> getCertPosts(String roomCode, Long userId) {
+    ManittoRoom room = roomRepository.findByRoomCode(roomCode)
+        .orElseThrow(() -> new NotFoundException(ErrorCode.RESOURCE_NOT_FOUND));
+    List<ManittoCertPost> posts = certPostRepository
+        .findAllByRoomIdAndStatusOrderByCreatedAtDesc(room.getId(), CertPostStatus.APPROVED);
+    List<Long> postIds = posts.stream().map(ManittoCertPost::getId).collect(Collectors.toList());
+    List<ManittoCertLike> allLikes = postIds.isEmpty()
+        ? Collections.emptyList()
+        : certLikeRepository.findByPostIdIn(postIds);
+    Map<Long, Long> likeCounts = allLikes.stream()
+        .collect(Collectors.groupingBy(ManittoCertLike::getPostId, Collectors.counting()));
+    java.util.Set<Long> myLikedIds = allLikes.stream()
+        .filter(l -> l.getUserId().equals(userId))
+        .map(ManittoCertLike::getPostId)
+        .collect(java.util.stream.Collectors.toSet());
+    return posts
+        .stream()
+        .map(p -> {
+          String manittiName = participantRepository
+              .findByRoomIdAndUserId(room.getId(), p.getTargetUserId())
+              .map(part -> part.getNickname() != null ? part.getNickname() : "")
+              .orElse("");
+          if (manittiName.isBlank()) {
+            manittiName = userRepository.findById(p.getTargetUserId())
+                .map(u -> u.getName()).orElse("마니띠");
+          }
+          String imageUrl = storageService.presignGet(p.getImageKey(), Duration.ofHours(1));
+          return ManittoCertPostResponse.builder()
+              .id(p.getId())
+              .manittiName(manittiName)
+              .imageUrl(imageUrl)
+              .comment(p.getComment())
+              .createdAt(formatTimeAgo(p.getCreatedAt()))
+              .likeCount(likeCounts.getOrDefault(p.getId(), 0L))
+              .liked(myLikedIds.contains(p.getId()))
+              .build();
+        })
+        .collect(Collectors.toList());
+  }
+
+  public LikeResponse toggleLike(String roomCode, Long userId, Long postId) {
+    ManittoCertPost post = certPostRepository.findById(postId)
+        .orElseThrow(() -> new NotFoundException(ErrorCode.RESOURCE_NOT_FOUND));
+    boolean alreadyLiked = certLikeRepository.existsByPostIdAndUserId(postId, userId);
+    if (alreadyLiked) {
+      certLikeRepository.deleteByPostIdAndUserId(postId, userId);
+    } else {
+      certLikeRepository.save(ManittoCertLike.of(postId, userId));
+    }
+    long likeCount = certLikeRepository.findByPostIdIn(List.of(postId)).stream()
+        .filter(l -> l.getPostId().equals(postId)).count();
+    return LikeResponse.builder().likeCount(likeCount).liked(!alreadyLiked).build();
+  }
+
+  @Transactional(readOnly = true)
+  public List<PendingCertResponse> getPendingCerts(String roomCode, Long userId) {
+    ManittoRoom room = roomRepository.findByRoomCode(roomCode)
+        .orElseThrow(() -> new NotFoundException(ErrorCode.RESOURCE_NOT_FOUND));
+    return certPostRepository
+        .findAllByRoomIdAndTargetUserIdAndStatus(room.getId(), userId, CertPostStatus.PENDING)
+        .stream()
+        .map(p -> PendingCertResponse.builder()
+            .postId(p.getId())
+            .imageUrl(storageService.presignGet(p.getImageKey(), Duration.ofHours(1)))
+            .build())
+        .collect(Collectors.toList());
   }
 
   private ManittoRoomResponse toRoomResponse(

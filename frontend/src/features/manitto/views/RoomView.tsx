@@ -25,8 +25,6 @@ interface RoomViewProps {
   canInteract: boolean;
   otherUserPresent: boolean;
   remoteGreetingBubble: string | null;
-  myCharPos: { x: number; y: number } | null;
-  remoteCharPos: { x: number; y: number } | null;
   onBack: () => void;
   onDrop: (data: {
     type: ManittoItemResponse["type"];
@@ -37,7 +35,6 @@ interface RoomViewProps {
   }) => void;
   onOpenObject: (id: number) => void;
   onStoreInLocker: (id: number) => void;
-  onMove: (x: number, y: number) => void;
   onSendGreet: (text: string) => void;
 }
 
@@ -52,13 +49,10 @@ const RoomView = ({
   canInteract,
   otherUserPresent,
   remoteGreetingBubble,
-  myCharPos,
-  remoteCharPos,
   onBack,
   onDrop,
   onOpenObject,
   onStoreInLocker,
-  onMove,
   onSendGreet,
 }: RoomViewProps) => {
   const [showDropModal, setShowDropModal] = useState(false);
@@ -78,8 +72,7 @@ const RoomView = ({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     if (y < 130) return;
-    onMove(x, y);                       // 모든 사용자 이동 가능
-    if (isMine || !canInteract) return; // 드롭은 마니또만
+    if (isMine || !canInteract) return;
     setSelectedPosition({ x, y });
     setShowDropModal(true);
   };
@@ -93,7 +86,6 @@ const RoomView = ({
 
   const floorObjects = objects.filter((o) => !o.inLocker);
   const lockerObjects = objects.filter((o) => o.inLocker);
-  const hasUnopened = floorObjects.some((o) => !o.isOpened);
 
   return (
     <div className="h-full flex flex-col relative overflow-hidden bg-[#FAF9F6]">
@@ -176,22 +168,13 @@ const RoomView = ({
                 사물함
               </div>
             </div>
-            {hasUnopened && (
-              <div className="absolute -top-2 -right-2 w-7 h-7 bg-[#E9967A] border-2 border-black flex items-center justify-center text-white font-black text-sm shadow-[2px_2px_0px_0px_black] animate-bounce z-30">
-                !
-              </div>
-            )}
           </div>
 
           {/* 내 방에 방문자가 있을 때 — 익명 캐릭터 */}
           {isMine && otherUserPresent && (
             <div
               className="absolute flex flex-col items-center z-10"
-              style={
-                remoteCharPos
-                  ? { left: remoteCharPos.x - 28, top: remoteCharPos.y - 130 - 56, transition: "left 0.3s ease, top 0.3s ease" }
-                  : { left: `calc(50% + ${visitorOffset.x}px)`, bottom: "33.33%", transform: "translateX(-50%)" }
-              }
+              style={{ left: `calc(50% + ${visitorOffset.x}px)`, bottom: "33.33%", transform: "translateX(-50%)" }}
             >
               <div className="relative">
                 {remoteGreetingBubble && (
@@ -232,11 +215,7 @@ const RoomView = ({
           {!isMine && otherUserPresent && (
             <div
               className="absolute flex flex-col items-center z-10"
-              style={
-                remoteCharPos
-                  ? { left: remoteCharPos.x - 28, top: remoteCharPos.y - 130 - 56, transition: "left 0.3s ease, top 0.3s ease" }
-                  : { left: "50%", bottom: "33.33%", transform: "translateX(-50%)" }
-              }
+              style={{ left: "50%", bottom: "33.33%", transform: "translateX(-50%)" }}
             >
               <div className="relative">
                 {remoteGreetingBubble && (
@@ -277,13 +256,7 @@ const RoomView = ({
           <div
             className="absolute flex flex-col items-center z-10"
             style={
-              myCharPos
-                ? {
-                    left: myCharPos.x - 28,
-                    top: myCharPos.y - 130 - 56,
-                    transition: "left 0.3s ease, top 0.3s ease",
-                  }
-                : isMine
+              isMine
                 ? { left: "50%", bottom: "33.33%", transform: "translateX(-50%)" }
                 : { left: `calc(50% + ${visitorOffset.x}px)`, bottom: "33.33%", transform: "translateX(-50%)" }
             }
@@ -362,20 +335,27 @@ const RoomView = ({
                 onOpenObject(obj.id);
               }}
             >
-              <div
-                className={
-                  obj.isOpened
-                    ? "opacity-60"
-                    : canInteract
-                    ? "animate-pulse"
-                    : "opacity-70"
-                }
-              >
-                {obj.type === "GIFT" && <PixelGift size={48} skin={obj.skin} />}
-                {obj.type === "MESSAGE" && (
-                  <PixelMail size={48} skin={obj.skin} />
+              <div className="relative">
+                {isMine && !obj.isOpened && (
+                  <div className="absolute -top-2 -right-2 w-5 h-5 bg-[#E9967A] border-2 border-black flex items-center justify-center text-white font-black text-xs shadow-[2px_2px_0px_0px_black] animate-bounce z-20">
+                    !
+                  </div>
                 )}
-                {obj.type === "HINT" && <PixelKey size={48} />}
+                <div
+                  className={
+                    obj.isOpened
+                      ? "opacity-60"
+                      : canInteract
+                      ? "animate-pulse"
+                      : "opacity-70"
+                  }
+                >
+                  {obj.type === "GIFT" && <PixelGift size={48} skin={obj.skin} />}
+                  {obj.type === "MESSAGE" && (
+                    <PixelMail size={48} skin={obj.skin} />
+                  )}
+                  {obj.type === "HINT" && <PixelKey size={48} />}
+                </div>
               </div>
             </div>
           ))}

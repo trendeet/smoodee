@@ -1,14 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
-import { X } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { Camera, X } from "lucide-react";
 import { ManittoItemType } from "../types";
 import { PixelGift, PixelMail, PixelKey } from "./PixelArts";
 
-interface DropData {
+export interface DropData {
   type: ManittoItemType;
   skin: number;
   content: string;
+  imageFile?: File;
+  wantToShare: boolean;
 }
 
 interface PixelDropModalProps {
@@ -54,10 +56,28 @@ const PixelDropModal = ({ onClose, onSave }: PixelDropModalProps) => {
   const [type, setType] = useState<ManittoItemType>("GIFT");
   const [skin, setSkin] = useState(0);
   const [content, setContent] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [wantToShare, setWantToShare] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleTypeChange = (t: ManittoItemType) => {
     setType(t);
     setSkin(0);
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setWantToShare(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   return (
@@ -101,14 +121,59 @@ const PixelDropModal = ({ onClose, onSave }: PixelDropModalProps) => {
 
         <textarea
           placeholder="여기에 마음을 적어주세요..."
-          className="w-full h-24 bg-[#FAF9F6] border-2 border-slate-100 p-3 text-[11px] font-bold focus:outline-none focus:border-black mb-6 resize-none text-black"
+          className="w-full h-24 bg-[#FAF9F6] border-2 border-slate-100 p-3 text-[11px] font-bold focus:outline-none focus:border-black mb-4 resize-none text-black"
           value={content}
           onChange={(e) => setContent(e.target.value)}
         />
 
+        {/* 인증 이미지 첨부 */}
+        <div className="mb-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleImageChange}
+          />
+          {imagePreview ? (
+            <div className="relative border-2 border-black">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imagePreview} alt="인증 미리보기" className="w-full h-32 object-cover" />
+              <button
+                onClick={removeImage}
+                className="absolute top-1 right-1 bg-black text-white p-0.5 border border-white"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-2 border-2 border-dashed border-slate-300 text-[10px] font-black text-slate-400 flex items-center justify-center gap-2 hover:border-black hover:text-black transition-colors"
+            >
+              <Camera size={14} /> 인증샷 첨부 (선택)
+            </button>
+          )}
+        </div>
+
+        {/* 자랑해줘 토글 */}
+        {imageFile && (
+          <button
+            onClick={() => setWantToShare(!wantToShare)}
+            className={`w-full mb-4 py-2 border-2 border-black text-[11px] font-black transition-all flex items-center justify-center gap-2 ${
+              wantToShare
+                ? "bg-[#162B44] text-white shadow-[3px_3px_0px_0px_black]"
+                : "bg-white text-slate-500"
+            }`}
+          >
+            {wantToShare ? "✓ 마니띠에게 자랑할게요! 🎉" : "자랑해줘! 🎉 (마니띠 승인 후 게시판에 공유)"}
+          </button>
+        )}
+
         <button
           disabled={!content}
-          onClick={() => onSave({ type, content, skin })}
+          onClick={() => onSave({ type, content, skin, imageFile: imageFile ?? undefined, wantToShare })}
           className={`w-full py-4 border-4 border-black font-black text-xs shadow-[4px_4px_0px_0px_black] transition-all ${
             content ? "bg-[#E9967A] text-white" : "bg-slate-100 text-slate-300 cursor-not-allowed"
           }`}
