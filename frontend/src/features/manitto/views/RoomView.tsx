@@ -60,7 +60,9 @@ const RoomView = ({
   const [showGreetingMenu, setShowGreetingMenu] = useState(false);
   const [menuFixedPos, setMenuFixedPos] = useState({ bottom: 0, left: 0 });
   const charRef = useRef<HTMLDivElement>(null);
-  const [selectedObj, setSelectedObj] = useState<ManittoItemResponse | null>(null);
+  const [selectedObj, setSelectedObj] = useState<ManittoItemResponse | null>(
+    null
+  );
   const [showAccessDenied, setShowAccessDenied] = useState(false);
   const [greetingBubble, setGreetingBubble] = useState<string | null>(null);
   const [selectedPosition, setSelectedPosition] = useState({ x: 100, y: 300 });
@@ -102,9 +104,7 @@ const RoomView = ({
       </div>
 
       <div
-        className={`flex-1 relative overflow-hidden ${
-          "cursor-pointer"
-        } flex flex-col`}
+        className={`flex-1 relative overflow-hidden ${"cursor-pointer"} flex flex-col`}
         onClick={(e) => {
           handleFloorClick(e);
           if (showGreetingMenu) setShowGreetingMenu(false);
@@ -174,7 +174,11 @@ const RoomView = ({
           {isMine && otherUserPresent && (
             <div
               className="absolute flex flex-col items-center z-10"
-              style={{ left: `calc(50% + ${visitorOffset.x}px)`, bottom: "33.33%", transform: "translateX(-50%)" }}
+              style={{
+                left: `calc(50% + ${visitorOffset.x}px)`,
+                bottom: "33.33%",
+                transform: "translateX(-50%)",
+              }}
             >
               <div className="relative">
                 {remoteGreetingBubble && (
@@ -215,7 +219,11 @@ const RoomView = ({
           {!isMine && otherUserPresent && (
             <div
               className="absolute flex flex-col items-center z-10"
-              style={{ left: "50%", bottom: "33.33%", transform: "translateX(-50%)" }}
+              style={{
+                left: "50%",
+                bottom: "33.33%",
+                transform: "translateX(-50%)",
+              }}
             >
               <div className="relative">
                 {remoteGreetingBubble && (
@@ -257,8 +265,16 @@ const RoomView = ({
             className="absolute flex flex-col items-center z-10"
             style={
               isMine
-                ? { left: "50%", bottom: "33.33%", transform: "translateX(-50%)" }
-                : { left: `calc(50% + ${visitorOffset.x}px)`, bottom: "33.33%", transform: "translateX(-50%)" }
+                ? {
+                    left: "50%",
+                    bottom: "33.33%",
+                    transform: "translateX(-50%)",
+                  }
+                : {
+                    left: `calc(50% + ${visitorOffset.x}px)`,
+                    bottom: "33.33%",
+                    transform: "translateX(-50%)",
+                  }
             }
           >
             <div className="relative" ref={charRef}>
@@ -350,7 +366,9 @@ const RoomView = ({
                       : "opacity-70"
                   }
                 >
-                  {obj.type === "GIFT" && <PixelGift size={48} skin={obj.skin} />}
+                  {obj.type === "GIFT" && (
+                    <PixelGift size={48} skin={obj.skin} />
+                  )}
                   {obj.type === "MESSAGE" && (
                     <PixelMail size={48} skin={obj.skin} />
                   )}
@@ -362,7 +380,9 @@ const RoomView = ({
 
           {!isMine && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black text-white border-2 border-white px-5 py-2.5 text-[9px] font-black shadow-[4px_4px_0px_0px_black] whitespace-nowrap uppercase">
-              {canInteract ? "바닥을 탭해 이동하거나 선물을 남기세요! ✨" : "바닥을 탭해 이동해보세요!"}
+              {canInteract
+                ? "바닥을 탭해 선물을 남기세요 ✨"
+                : "바닥을 탭해 이동해보세요!"}
             </div>
           )}
         </div>
@@ -410,12 +430,18 @@ const RoomView = ({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="bg-[#162B44] px-4 py-3 border-b-4 border-black">
-              <p className="text-white text-[11px] font-black uppercase tracking-widest">접근 제한</p>
+              <p className="text-white text-[11px] font-black uppercase tracking-widest">
+                접근 제한
+              </p>
             </div>
             <div className="p-6 text-center">
               <p className="text-2xl mb-3">🔒</p>
-              <p className="text-[13px] font-black text-black mb-1">마니또 · 마니띠만</p>
-              <p className="text-[13px] font-black text-black mb-4">접근이 가능합니다</p>
+              <p className="text-[13px] font-black text-black mb-1">
+                마니또 · 마니띠만
+              </p>
+              <p className="text-[13px] font-black text-black mb-4">
+                접근이 가능합니다
+              </p>
               <p className="text-[10px] text-slate-400 font-bold mb-6">
                 이 선물은 방 주인과 그의 마니또만 열 수 있어요
               </p>
@@ -453,7 +479,14 @@ const RoomView = ({
           obj={selectedObj}
           isMine={isMine}
           onClose={() => setSelectedObj(null)}
-          onStoreInLocker={isMine ? () => { onStoreInLocker(selectedObj.id); setSelectedObj(null); } : undefined}
+          onStoreInLocker={
+            isMine
+              ? () => {
+                  onStoreInLocker(selectedObj.id);
+                  setSelectedObj(null);
+                }
+              : undefined
+          }
         />
       )}
     </div>
