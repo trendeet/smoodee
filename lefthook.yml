@@ -1,0 +1,18 @@
+commit-msg:
+  jobs:
+    - name: validate commit message
+      run: node scripts/lefthook/validate-commit-msg.js {1}
+
+pre-commit:
+  jobs:
+    - name: frontend eslint
+      root: "frontend/"
+      glob: "*.{js,jsx,ts,tsx}"
+      run: npx eslint --fix {staged_files}
+      stage_fixed: true
+
+    - name: backend spotless
+      root: "backend/"
+      glob: "*.java"
+      run: ./gradlew spotlessApply
+      stage_fixed: true
