@@ -43,3 +43,8 @@ backend/src/main/resources/application-prod.yml
 
 # Playwright MCP
 .playwright-mcp/
+
+# Playwright E2E artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
