@@ -105,7 +105,7 @@ const GuideScreen = () => {
               혼자서도 즐길 수 있어요
             </h3>
             <p className="text-gray-500 text-sm break-keep leading-relaxed font-medium px-4">
-              '개인' 태그를 갖고 있는 템플릿은
+              &apos;개인&apos; 태그를 갖고 있는 템플릿은
               <br />
               혼자서도 즐길 수 있습니다!
             </p>
@@ -125,7 +125,7 @@ const GuideScreen = () => {
               친구들을 초대해보세요
             </h3>
             <p className="text-gray-500 text-sm break-keep leading-relaxed font-medium px-2">
-              '그룹' 태그를 갖고 있는 템플릿은
+              &apos;그룹&apos; 태그를 갖고 있는 템플릿은
               <br />
               친구들과 함께 사용할 수 있습니다.
               <br />
