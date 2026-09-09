@@ -1,0 +1,10 @@
+{
+  "name": "smoodee",
+  "private": true,
+  "scripts": {
+    "prepare": "lefthook install"
+  },
+  "devDependencies": {
+    "lefthook": "^1.10.0"
+  }
+}
